@@ -6,6 +6,8 @@
   <title>Speedy — Consulta Vehicular Colombia</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -133,9 +135,9 @@
   <div id="results" class="hidden fade-in space-y-5">
 
     <!-- Action Buttons -->
-    <div class="flex gap-2 justify-end no-print">
-      <button onclick="window.print()" class="bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 shadow-sm">
-        <i class="fa-solid fa-print"></i> Imprimir
+    <div class="flex gap-2 justify-end no-print flex-wrap">
+      <button onclick="generarPDF()" class="bg-brand hover:bg-brand-light text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 shadow-sm">
+        <i class="fa-solid fa-file-pdf"></i> Descargar PDF
       </button>
       <button onclick="copiarWhatsApp()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 shadow-sm">
         <i class="fa-brands fa-whatsapp"></i> Copiar para WhatsApp
@@ -362,12 +364,15 @@ function renderResults(d) {
   if (!d) return;
   const auth = d.auth || {};
 
+  // RTM lives in solicitudes, not in the /rtms endpoint (which returns empty)
+  const _rtmSol = extractRtmSol(d.solicitudes);
+
   renderVehiculo(auth);
   renderSOATStatus(d.soat);
-  renderRTMStatus(d.tecnomecanica);
+  renderRTMStatus(_rtmSol);
   renderSIMITStatus(d.simit);
   renderSOAT(d.soat);
-  renderRTM(d.tecnomecanica);
+  renderRTM(_rtmSol);
   renderRC(d.responsabilidad_civil);
   renderTarjetaOp(d.tarjeta_operacion);
   renderLimitaciones(d.limitaciones);
@@ -455,11 +460,9 @@ function renderSOATStatus(soat) {
     </div>`;
 }
 
-function renderRTMStatus(tec) {
-  // /rtms returns a list directly or a dict with "revisiones"
-  const revs = Array.isArray(tec) ? tec : (tec && tec.revisiones ? tec.revisiones : []);
-  const latest = revs.length ? revs[0] : null;
-  const vig = latest ? isVigente(latest.fechaVigencia) : false;
+function renderRTMStatus(rtmSol) {
+  const vigDate = rtmSol ? addOneYearISO(rtmSol.fechaSolicitud) : null;
+  const vig = vigDate ? isVigente(vigDate) : false;
   const el = document.getElementById('card-rtm-status');
   el.innerHTML = `
     <div class="text-center">
@@ -467,9 +470,9 @@ function renderRTMStatus(tec) {
         <i class="fa-solid fa-wrench"></i>
       </div>
       <p class="font-bold text-gray-700">Revisión Técnico-Mecánica</p>
-      ${statusBadge(vig ? 'Vigente' : (latest ? 'Vencida' : 'Sin datos'), vig)}
-      ${latest ? `<p class="text-xs text-gray-400 mt-2">Vence: ${fmtFecha(latest.fechaVigencia)}</p>` : ''}
-      ${latest ? `<p class="text-xs text-gray-500">${latest.nombreCda || ''}</p>` : ''}
+      ${statusBadge(vig ? 'Vigente' : (rtmSol ? 'Vencida' : 'Sin datos'), rtmSol ? vig : null)}
+      ${vigDate ? `<p class="text-xs text-gray-400 mt-2">Vence aprox: ${fmtFecha(vigDate)}</p>` : ''}
+      ${rtmSol ? `<p class="text-xs text-gray-500">${rtmSol.entidad || ''}</p>` : ''}
     </div>`;
 }
 
@@ -519,29 +522,20 @@ function renderSOAT(soat) {
 // ============================================================
 // RENDER: RTM DETAIL
 // ============================================================
-function renderRTM(tec) {
+function renderRTM(rtmSol) {
   const el = document.getElementById('card-rtm');
-  // /rtms returns a list directly or a dict with "revisiones"
-  const revs = Array.isArray(tec) ? tec : (tec && tec.revisiones ? tec.revisiones : []);
-  if (!revs.length) {
-    el.innerHTML = cardTitle('fa-wrench', 'Revisión Técnico-Mecánica') + emptyState('Sin información de RTM');
+  if (!rtmSol) {
+    el.innerHTML = cardTitle('fa-wrench', 'Revisión Técnico-Mecánica') + emptyState('Sin RTM registrado en RUNT');
     return;
   }
-  const r = revs[0];
-  const vig = isVigente(r.fechaVigencia);
+  const vigDate = addOneYearISO(rtmSol.fechaSolicitud);
+  const vig = vigDate ? isVigente(vigDate) : false;
   el.innerHTML = cardTitle('fa-wrench', 'Revisión Técnico-Mecánica') +
-    infoRow('No. Certificado', r.nroCertificado) +
-    infoRow('CDA', r.nombreCda) +
-    infoRow('Fecha emisión', fmtFecha(r.fechaInicio)) +
-    infoRow('Vencimiento', fmtFecha(r.fechaVigencia)) +
-    infoRow('Estado', statusBadge(r.estado || (vig ? 'Vigente' : 'Vencida'), vig));
-
-  if (revs.length > 1) {
-    el.innerHTML += `<details class="mt-3"><summary class="text-xs text-brand cursor-pointer">Ver revisiones anteriores (${revs.length - 1})</summary>
-      <div class="mt-2 space-y-2">
-      ${revs.slice(1).map(r2 => `<div class="bg-gray-50 rounded-lg p-2 text-xs">${r2.nroCertificado} — ${r2.nombreCda} — Vence: ${fmtFecha(r2.fechaVigencia)}</div>`).join('')}
-      </div></details>`;
-  }
+    infoRow('No. Solicitud', rtmSol.noSolicitud) +
+    infoRow('CDA', rtmSol.entidad) +
+    infoRow('Fecha RTM', fmtFecha(rtmSol.fechaSolicitud)) +
+    infoRow('Vence (aprox.)', fmtFecha(vigDate)) +
+    infoRow('Estado', statusBadge(rtmSol.estado || (vig ? 'Vigente' : 'Vencida'), vig));
 }
 
 // ============================================================
@@ -907,6 +901,386 @@ function generarTextoWhatsApp() {
     ``,
     `_Consulta realizada ${new Date().toLocaleString('es-CO')}_`
   ].join('\n');
+}
+
+// ============================================================
+// RTM HELPERS
+// ============================================================
+function extractRtmSol(solicitudes) {
+  const kws = ['tecnico mecanica', 'tecnomecanica', 'rtm'];
+  const cands = (Array.isArray(solicitudes) ? solicitudes : [])
+    .filter(s => { const t = ((s.tramitesRealizados || '') + '').toLowerCase(); return kws.some(k => t.includes(k)); });
+  cands.sort((a, b) => ((b.fechaSolicitud || '') > (a.fechaSolicitud || '') ? 1 : -1));
+  return cands[0] || null;
+}
+
+function addOneYearISO(isoDate) {
+  if (!isoDate) return null;
+  const f = String(isoDate).substring(0, 10).split('-');
+  if (f.length !== 3) return null;
+  return `${parseInt(f[0]) + 1}-${f[1]}-${f[2]}`;
+}
+
+// ============================================================
+// PDF GENERATION — Certificado Formal
+// ============================================================
+function generarPDF() {
+  if (!currentData) return;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+
+  const d     = currentData;
+  const auth  = d.auth || {};
+  const info  = auth.infoVehiculo || {};
+  const props = auth.propietarios || [];
+  const soat  = Array.isArray(d.soat) ? d.soat : [];
+  const rc    = Array.isArray(d.responsabilidad_civil) ? d.responsabilidad_civil : [];
+  const lims  = Array.isArray(d.limitaciones) ? d.limitaciones : [];
+  const to    = d.tarjeta_operacion || {};
+  const simit = d.simit || {};
+
+  const soatLast = soat.length ? soat.reduce((a, b) =>
+    ((a.fechaVencimSoat || '') > (b.fechaVencimSoat || '') ? a : b)) : null;
+  const rcActiva = rc.find(x => (x.estado || '').toUpperCase() === 'ACTIVA') || rc[rc.length - 1] || null;
+  const rtmSol   = extractRtmSol(d.solicitudes);
+  const rtmVigDate = addOneYearISO(rtmSol ? rtmSol.fechaSolicitud : null);
+
+  const placa   = info.placa || document.getElementById('placa-input').value.toUpperCase() || '—';
+  const now     = new Date();
+  const nowStr  = now.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+                  ' ' + now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  const reportNo = `SP-${placa}-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+
+  // ── HEADER ────────────────────────────────────────────────
+  doc.setFillColor(30, 58, 138);
+  doc.rect(0, 0, W, 28, 'F');
+
+  // Left: brand
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(22); doc.setFont('helvetica', 'bold');
+  doc.text('SPEEDY', 12, 13);
+  doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+  doc.text('Sistema de Consulta Vehicular Colombia', 12, 18);
+  doc.setFontSize(7);
+  doc.text('RUNT · SIMIT · Datos Oficiales', 12, 22);
+
+  // Right: title + report number
+  doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+  doc.text('CERTIFICADO DE CONSULTA VEHICULAR', W - 12, 12, { align: 'right' });
+  doc.setFontSize(8); doc.setFont('helvetica', 'normal');
+  doc.text(`Reporte: ${reportNo}`, W - 12, 17, { align: 'right' });
+  doc.text(`Fecha: ${nowStr}`, W - 12, 21.5, { align: 'right' });
+
+  // Separator bar
+  doc.setFillColor(37, 99, 235);
+  doc.rect(0, 28, W, 2, 'F');
+
+  let y = 36;
+
+  // ── HELPER ────────────────────────────────────────────────
+  function pageCheck(needed) {
+    if (y + needed > H - 18) {
+      addFooter();
+      doc.addPage();
+      y = 15;
+    }
+  }
+
+  function sectionHeader(title, iconLabel) {
+    pageCheck(14);
+    doc.setFillColor(241, 245, 249);
+    doc.rect(12, y - 4, W - 24, 9, 'F');
+    doc.setDrawColor(30, 58, 138); doc.setLineWidth(0.5);
+    doc.line(12, y - 4, 12, y + 5);
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 58, 138);
+    doc.text(title.toUpperCase(), 16, y + 1.5);
+    doc.setTextColor(0, 0, 0);
+    y += 8;
+  }
+
+  function statusCell(estado) {
+    const e = (estado || '').toUpperCase();
+    if (e === 'VIGENTE' || e === 'ACTIVA' || e === 'ACTIVO') return 'VIGENTE';
+    if (e === 'VENCIDO' || e === 'VENCIDA') return 'VENCIDO';
+    if (e === 'SIN DATOS' || e === '') return 'Sin datos';
+    return estado || '—';
+  }
+
+  function colorStatus(hd) {
+    if (hd.section === 'body' && hd.column.index === 5) {
+      const v = (hd.cell.raw || '').toString().toUpperCase();
+      if (v === 'VIGENTE' || v === 'ACTIVO' || v === 'ACTIVA') {
+        hd.cell.styles.textColor = [21, 128, 61]; hd.cell.styles.fontStyle = 'bold';
+      } else if (v === 'VENCIDO' || v === 'VENCIDA') {
+        hd.cell.styles.textColor = [220, 38, 38]; hd.cell.styles.fontStyle = 'bold';
+      }
+    }
+  }
+
+  // ── SECCIÓN 1: DATOS DEL VEHÍCULO ─────────────────────────
+  sectionHeader('Datos del Vehículo');
+  const propName = props.map(p => p.nombrePropietario).filter(Boolean).join(', ') || '—';
+
+  doc.autoTable({
+    startY: y, margin: { left: 12, right: 12 }, theme: 'plain',
+    styles: { fontSize: 8, cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 } },
+    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { fontStyle: 'bold', textColor: [71, 85, 105], cellWidth: 33, fillColor: [241, 245, 249] },
+      1: { cellWidth: 52 },
+      2: { fontStyle: 'bold', textColor: [71, 85, 105], cellWidth: 33, fillColor: [241, 245, 249] },
+      3: { cellWidth: 52 },
+    },
+    body: [
+      ['Placa',         info.placa || '—',             'Estado',      info.estadoAutomotor || '—'],
+      ['Marca',         info.marca || '—',             'Línea',       info.linea || '—'],
+      ['Año Modelo',    info.modelo || '—',            'Color',       info.color || '—'],
+      ['Clase',         info.clase || '—',             'Tipo Serv.',  info.tipoServicio || '—'],
+      ['Combustible',   info.tipoCombustible || '—',   'Cilindraje',  info.cilindraje || '—'],
+      ['Pasajeros',     String(info.pasajerosSentados || '—'), 'Carga',  info.capacidadCarga || '—'],
+      ['N° Motor',      info.numMotor || info.numeroMotor || '—',    'N° Chasis', info.numChasis || info.numeroChasis || '—'],
+      ['Propietario',   propName,                      'Municipio',   info.municipioRegistro || info.organismoTransito || '—'],
+    ],
+    didParseCell: hd => {
+      if (hd.section === 'body' && (hd.column.index === 0 || hd.column.index === 2)) {
+        hd.cell.styles.fillColor = [241, 245, 249];
+      }
+    }
+  });
+  y = doc.lastAutoTable.finalY + 6;
+
+  // ── SECCIÓN 2: ESTADO DE DOCUMENTOS ───────────────────────
+  pageCheck(50);
+  sectionHeader('Estado de Documentos');
+
+  const docRows = [];
+
+  // SOAT
+  if (soatLast) {
+    const vigS = isVigente(soatLast.fechaVencimSoat);
+    docRows.push(['SOAT',
+      soatLast.numSoat || soatLast.numeroPoliza || '—',
+      fmtFecha(soatLast.fechaInicioPoliza || soatLast.fechaInicioSoat),
+      fmtFecha(soatLast.fechaVencimSoat),
+      soatLast.razonSocialAsegur || '—',
+      statusCell(soatLast.estado || (vigS ? 'VIGENTE' : 'VENCIDO'))]);
+  } else {
+    docRows.push(['SOAT', '—', '—', '—', '—', 'Sin datos']);
+  }
+
+  // RTM
+  if (rtmSol) {
+    const vigR = rtmVigDate ? isVigente(rtmVigDate) : false;
+    docRows.push(['RTM / Tecno-Mecánica',
+      String(rtmSol.noSolicitud || '—'),
+      fmtFecha(rtmSol.fechaSolicitud),
+      fmtFecha(rtmVigDate) + ' *',
+      rtmSol.entidad || '—',
+      statusCell(rtmSol.estado || (vigR ? 'VIGENTE' : 'VENCIDO'))]);
+  } else {
+    docRows.push(['RTM / Tecno-Mecánica', '—', '—', '—', '—', 'Sin datos']);
+  }
+
+  // RC
+  if (rcActiva) {
+    const vigRC = isVigente(rcActiva.fechaFinVigencia);
+    docRows.push(['Resp. Civil',
+      rcActiva.numeroCertificado || rcActiva.numeroPoliza || '—',
+      fmtFecha(rcActiva.fechaInicioVigencia),
+      fmtFecha(rcActiva.fechaFinVigencia),
+      rcActiva.entidadExpide || rcActiva.compania || '—',
+      statusCell(rcActiva.estado || (vigRC ? 'VIGENTE' : 'VENCIDO'))]);
+  } else {
+    docRows.push(['Resp. Civil', '—', '—', '—', '—', 'Sin datos']);
+  }
+
+  // Tarjeta Operación
+  if (to && (to.nroTarjetaOperacion || to.numeroTarjeta)) {
+    const vigTO = isVigente(to.fechaFin);
+    docRows.push(['Tarjeta de Operación',
+      to.nroTarjetaOperacion || to.numeroTarjeta || '—',
+      fmtFecha(to.fechaInicio),
+      fmtFecha(to.fechaFin),
+      to.empresaAfiliadora || to.empresa || '—',
+      statusCell(to.estado || (vigTO ? 'VIGENTE' : 'VENCIDO'))]);
+  } else {
+    docRows.push(['Tarjeta de Operación', 'No aplica', '—', '—', '—', 'N/A']);
+  }
+
+  doc.autoTable({
+    startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 38 },
+      1: { cellWidth: 28 },
+      2: { cellWidth: 22 },
+      3: { cellWidth: 22 },
+      4: { },
+      5: { cellWidth: 22, fontStyle: 'bold' },
+    },
+    head: [['Documento', 'N° / Certificado', 'Desde', 'Hasta', 'Entidad', 'Estado']],
+    body: docRows,
+    didDrawCell: colorStatus,
+  });
+  y = doc.lastAutoTable.finalY + 3;
+  doc.setFontSize(6.5); doc.setFont('helvetica', 'italic'); doc.setTextColor(120);
+  doc.text('* Vencimiento RTM calculado como fecha de RTM + 1 año (estimado).', 12, y);
+  doc.setTextColor(0); y += 6;
+
+  // ── SECCIÓN 3: SIMIT ───────────────────────────────────────
+  pageCheck(30);
+  sectionHeader('SIMIT — Estado de Cuenta');
+
+  if (simit.pazSalvo || !simit.totalGeneral) {
+    doc.setFillColor(220, 252, 231); doc.setDrawColor(134, 239, 172);
+    doc.roundedRect(12, y, W - 24, 12, 2, 2, 'FD');
+    doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(21, 128, 61);
+    doc.text('✓  PAZ Y SALVO — Sin multas ni comparendos pendientes en SIMIT', W / 2, y + 7.5, { align: 'center' });
+    doc.setTextColor(0); y += 16;
+  } else {
+    // Total box
+    doc.setFillColor(254, 226, 226); doc.setDrawColor(252, 165, 165);
+    doc.roundedRect(12, y, W - 24, 10, 2, 2, 'FD');
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(185, 28, 28);
+    const totalStr = `TOTAL A PAGAR: $${Math.round(simit.totalGeneral || 0).toLocaleString('es-CO')}`;
+    doc.text(totalStr, W / 2, y + 6.5, { align: 'center' });
+    doc.setTextColor(0); y += 14;
+
+    const multas = simit.multas || [];
+    const comparendos = simit.comparendos || [];
+
+    if (multas.length) {
+      pageCheck(30);
+      const multaRows = multas.map(m => {
+        const infs = (m.infracciones || []).map(i => `${i.codigoInfraccion || ''} ${i.descripcionInfraccion || ''}`).join(' / ');
+        return [
+          m.numeroResolucion || '—',
+          fmtFecha(m.fechaResolucion),
+          m.organismoTransito || '—',
+          infs || '—',
+          m.estadoCartera || '—',
+          `$${Math.round(m.valorPagar || 0).toLocaleString('es-CO')}`,
+        ];
+      });
+      doc.autoTable({
+        startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+        headStyles: { fillColor: [185, 28, 28], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+        alternateRowStyles: { fillColor: [255, 241, 242] },
+        head: [['N° Resolución', 'Fecha', 'Organismo', 'Infracción', 'Estado', 'Valor']],
+        body: multaRows,
+        foot: [['', '', '', '', 'TOTAL:', `$${Math.round(simit.totalGeneral || 0).toLocaleString('es-CO')}`]],
+        footStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      });
+      y = doc.lastAutoTable.finalY + 5;
+    }
+
+    if (comparendos.length) {
+      pageCheck(30);
+      const compRows = comparendos.map(c => [
+        c.numeroResolucion || c.noComparendo || '—',
+        fmtFecha(c.fechaResolucion || c.fecha),
+        c.estadoCartera || c.estado || '—',
+        `$${Math.round(c.valorPagar || 0).toLocaleString('es-CO')}`,
+      ]);
+      doc.autoTable({
+        startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+        headStyles: { fillColor: [120, 53, 15], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+        alternateRowStyles: { fillColor: [255, 247, 237] },
+        head: [['N° Comparendo', 'Fecha', 'Estado', 'Valor']],
+        body: compRows,
+      });
+      y = doc.lastAutoTable.finalY + 5;
+    }
+  }
+
+  // ── SECCIÓN 4: LIMITACIONES ────────────────────────────────
+  pageCheck(20);
+  sectionHeader('Limitaciones de Circulación');
+
+  if (!lims.length) {
+    doc.setFillColor(220, 252, 231); doc.setDrawColor(134, 239, 172);
+    doc.roundedRect(12, y, W - 24, 10, 2, 2, 'FD');
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(21, 128, 61);
+    doc.text('✓  El vehículo no registra limitaciones de circulación', W / 2, y + 6.5, { align: 'center' });
+    doc.setTextColor(0); y += 14;
+  } else {
+    const limRows = lims.map(l => [
+      l.tipoLimitacion || '—',
+      l.entidadJuridica || l.entidad || '—',
+      l.municipio || '—',
+      fmtFecha(l.fechaLimitacion || l.fechaInicio),
+      l.estado || '—',
+      l.valorMulta ? `$${Math.round(l.valorMulta).toLocaleString('es-CO')}` : '—',
+    ]);
+    doc.autoTable({
+      startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+      headStyles: { fillColor: [220, 38, 38], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+      alternateRowStyles: { fillColor: [255, 241, 242] },
+      head: [['Tipo', 'Entidad', 'Municipio', 'Fecha', 'Estado', 'Valor']],
+      body: limRows,
+    });
+    y = doc.lastAutoTable.finalY + 5;
+  }
+
+  // ── SECCIÓN 5: GARANTÍAS / PRENDAS ────────────────────────
+  const gars = Array.isArray(d.garantias) ? d.garantias : [];
+  const prendas = Array.isArray(d.garantias_prendas) ? d.garantias_prendas : [];
+  if (gars.length || prendas.length) {
+    pageCheck(25);
+    sectionHeader('Garantías y Prendas');
+    const garRows = [
+      ...gars.map(g => ['Garantía', g.acreedor || '—', g.tipoGarantia || '—', fmtFecha(g.fechaRegistro), g.estado || '—']),
+      ...prendas.map(p => ['Prenda', p.acreedor || '—', p.tipo || '—', '—', p.estado || '—']),
+    ];
+    doc.autoTable({
+      startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+      headStyles: { fillColor: [120, 53, 15], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
+      bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+      alternateRowStyles: { fillColor: [255, 247, 237] },
+      head: [['Tipo', 'Acreedor', 'Categoría', 'Fecha Registro', 'Estado']],
+      body: garRows,
+    });
+    y = doc.lastAutoTable.finalY + 5;
+  }
+
+  // ── FOOTER EN CADA PÁGINA ─────────────────────────────────
+  function addFooter() {
+    const pages = doc.internal.getNumberOfPages();
+    doc.setPage(pages);
+    const fy = H - 10;
+    doc.setFillColor(241, 245, 249); doc.rect(0, fy - 3, W, 13, 'F');
+    doc.setFontSize(6.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 116, 139);
+    doc.text(
+      'Este certificado es de carácter informativo. Los datos provienen de las fuentes oficiales RUNT (runt.gov.co) y SIMIT (fcm.org.co). Speedy no garantiza su exactitud en tiempo real.',
+      W / 2, fy + 1, { align: 'center', maxWidth: W - 24 });
+    doc.text(`Pág. ${pages}`, W - 12, fy + 5, { align: 'right' });
+    doc.text(`Speedy · Consulta: ${nowStr}`, 12, fy + 5);
+  }
+
+  // Numerar todas las páginas al final
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    const fy = H - 10;
+    doc.setFillColor(241, 245, 249); doc.rect(0, fy - 3, W, 13, 'F');
+    doc.setFontSize(6.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 116, 139);
+    doc.text(
+      'Este certificado es de carácter informativo. Los datos provienen de las fuentes oficiales RUNT (runt.gov.co) y SIMIT (fcm.org.co). Speedy no garantiza su exactitud en tiempo real.',
+      W / 2, fy + 1, { align: 'center', maxWidth: W - 24 });
+    doc.text(`Página ${i} de ${totalPages}`, W - 12, fy + 5, { align: 'right' });
+    doc.text(`Speedy · ${nowStr}`, 12, fy + 5);
+  }
+
+  const dateTag = now.toISOString().substring(0, 10);
+  doc.save(`Speedy_Certificado_${placa}_${dateTag}.pdf`);
 }
 
 // ============================================================
