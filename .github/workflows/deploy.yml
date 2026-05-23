@@ -31,22 +31,6 @@ jobs:
           push: true
           tags: ${{ env.IMAGE }}
 
-      - name: Log in to Azure
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Update container image on App Service
-        uses: azure/CLI@v2
-        with:
-          inlineScript: |
-            az webapp config container set \
-              --name ${{ secrets.AZURE_APP_NAME }} \
-              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} \
-              --docker-custom-image-name ${{ env.IMAGE }} \
-              --docker-registry-server-url https://ghcr.io \
-              --docker-registry-server-user ${{ github.actor }} \
-              --docker-registry-server-password ${{ secrets.GITHUB_TOKEN }}
-            az webapp restart \
-              --name ${{ secrets.AZURE_APP_NAME }} \
-              --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }}
+      - name: Trigger Azure App Service pull
+        run: |
+          curl -s -X POST "${{ secrets.AZURE_WEBHOOK_URL }}"

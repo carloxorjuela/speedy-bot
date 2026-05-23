@@ -23,5 +23,5 @@ EXPOSE 8080
 
 # Al arrancar: si no existe la DB en /home/data, copiar la inicial incluida en la imagen
 CMD ["sh", "-c", "\
-  [ ! -f /home/data/carplus.db ] && cp -n /app/carplus.db /home/data/carplus.db 2>/dev/null || true; \
+  mkdir -p /home/data && [ ! -f /home/data/carplus.db ] && cp -n /app/carplus.db /home/data/carplus.db 2>/dev/null || true; \
   gunicorn --bind 0.0.0.0:8080 --workers 1 --timeout 120 api:app"]
