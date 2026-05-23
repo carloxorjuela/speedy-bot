@@ -1024,7 +1024,7 @@ function generarPDF() {
   const propName = props.map(p => p.nombrePropietario).filter(Boolean).join(', ') || '—';
 
   doc.autoTable({
-    startY: y, margin: { left: 12, right: 12 }, theme: 'plain',
+    startY: y, margin: { left: 12, right: 12, bottom: 20 }, theme: 'plain',
     styles: { fontSize: 8, cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 } },
     headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold', fontSize: 8 },
     alternateRowStyles: { fillColor: [248, 250, 252] },
@@ -1111,16 +1111,17 @@ function generarPDF() {
   }
 
   doc.autoTable({
-    startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+    startY: y, margin: { left: 12, right: 12, bottom: 20 }, theme: 'striped',
     headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 8, fontStyle: 'bold' },
     bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+    styles: { overflow: 'linebreak', cellPadding: { top: 2.5, bottom: 2.5, left: 3, right: 3 } },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     columnStyles: {
       0: { fontStyle: 'bold', cellWidth: 38 },
       1: { cellWidth: 28 },
       2: { cellWidth: 22 },
       3: { cellWidth: 22 },
-      4: { },
+      4: { cellWidth: 'auto' },
       5: { cellWidth: 22, fontStyle: 'bold' },
     },
     head: [['Documento', 'N° / Certificado', 'Desde', 'Hasta', 'Entidad', 'Estado']],
@@ -1157,7 +1158,9 @@ function generarPDF() {
     if (multas.length) {
       pageCheck(30);
       const multaRows = multas.map(m => {
-        const infs = (m.infracciones || []).map(i => `${i.codigoInfraccion || ''} ${i.descripcionInfraccion || ''}`).join(' / ');
+        const infs = (m.infracciones || []).map(i =>
+          [i.codigoInfraccion, i.descripcionInfraccion].filter(Boolean).join(' – ')
+        ).join('\n');
         return [
           m.numeroResolucion || '—',
           fmtFecha(m.fechaResolucion),
@@ -1168,14 +1171,26 @@ function generarPDF() {
         ];
       });
       doc.autoTable({
-        startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+        startY: y,
+        margin: { left: 12, right: 12, bottom: 20 },
+        theme: 'striped',
         headStyles: { fillColor: [185, 28, 28], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
         bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+        styles: { overflow: 'linebreak', cellPadding: { top: 2.5, bottom: 2.5, left: 2.5, right: 2.5 } },
         alternateRowStyles: { fillColor: [255, 241, 242] },
+        columnStyles: {
+          0: { cellWidth: 30 },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 32 },
+          3: { cellWidth: 'auto' },
+          4: { cellWidth: 24 },
+          5: { cellWidth: 22, halign: 'right' },
+        },
         head: [['N° Resolución', 'Fecha', 'Organismo', 'Infracción', 'Estado', 'Valor']],
         body: multaRows,
         foot: [['', '', '', '', 'TOTAL:', `$${Math.round(simit.totalGeneral || 0).toLocaleString('es-CO')}`]],
         footStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+        didDrawPage: () => { y = 15; },
       });
       y = doc.lastAutoTable.finalY + 5;
     }
@@ -1189,12 +1204,22 @@ function generarPDF() {
         `$${Math.round(c.valorPagar || 0).toLocaleString('es-CO')}`,
       ]);
       doc.autoTable({
-        startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+        startY: y,
+        margin: { left: 12, right: 12, bottom: 20 },
+        theme: 'striped',
         headStyles: { fillColor: [120, 53, 15], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
         bodyStyles: { fontSize: 7, textColor: [30, 41, 59] },
+        styles: { overflow: 'linebreak', cellPadding: { top: 2.5, bottom: 2.5, left: 2.5, right: 2.5 } },
         alternateRowStyles: { fillColor: [255, 247, 237] },
+        columnStyles: {
+          0: { cellWidth: 45 },
+          1: { cellWidth: 26 },
+          2: { cellWidth: 'auto' },
+          3: { cellWidth: 28, halign: 'right' },
+        },
         head: [['N° Comparendo', 'Fecha', 'Estado', 'Valor']],
         body: compRows,
+        didDrawPage: () => { y = 15; },
       });
       y = doc.lastAutoTable.finalY + 5;
     }
@@ -1220,12 +1245,24 @@ function generarPDF() {
       l.valorMulta ? `$${Math.round(l.valorMulta).toLocaleString('es-CO')}` : '—',
     ]);
     doc.autoTable({
-      startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+      startY: y,
+      margin: { left: 12, right: 12, bottom: 20 },
+      theme: 'striped',
       headStyles: { fillColor: [220, 38, 38], textColor: 255, fontSize: 7.5, fontStyle: 'bold' },
       bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+      styles: { overflow: 'linebreak', cellPadding: { top: 2.5, bottom: 2.5, left: 2.5, right: 2.5 } },
       alternateRowStyles: { fillColor: [255, 241, 242] },
+      columnStyles: {
+        0: { cellWidth: 38 },
+        1: { cellWidth: 'auto' },
+        2: { cellWidth: 28 },
+        3: { cellWidth: 22 },
+        4: { cellWidth: 24 },
+        5: { cellWidth: 22, halign: 'right' },
+      },
       head: [['Tipo', 'Entidad', 'Municipio', 'Fecha', 'Estado', 'Valor']],
       body: limRows,
+      didDrawPage: () => { y = 15; },
     });
     y = doc.lastAutoTable.finalY + 5;
   }
