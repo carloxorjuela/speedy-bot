@@ -366,14 +366,21 @@ class RuntScraper:
 
         # ── SOAT ─────────────────────────────────────────────────────────────
         soat_list = datos.get("soat")
-        lineas.append("*PÓLIZA SOAT*")
+        lineas.append("*PÓLIZAS SOAT*")
         if isinstance(soat_list, list) and soat_list:
-            soat = soat_list[-1]
-            lineas.append(f"  N° SOAT: {soat.get('numSoat', 'N/D')}")
-            lineas.append(f"  Inicio vigencia: {self._fmt_fecha(soat.get('fechaInicioPoliza'))}")
-            lineas.append(f"  Vencimiento: {self._fmt_fecha(soat.get('fechaVencimSoat'))}")
-            lineas.append(f"  Aseguradora: {soat.get('razonSocialAsegur', 'N/D')}")
-            lineas.append(f"  Estado: {soat.get('estado', 'N/D')}")
+            soat_ordenados = sorted(
+                soat_list,
+                key=lambda s: (s.get("fechaInicioPoliza") or s.get("fechaVencimSoat") or "")[:10],
+                reverse=True,
+            )
+            for soat in soat_ordenados:
+                estado = soat.get("estado", "N/D")
+                prefijo = "✅" if "VIGENTE" in estado.upper() and "NO" not in estado.upper() else "❌"
+                lineas.append(f"  {prefijo} N° SOAT: {soat.get('numSoat', 'N/D')}")
+                lineas.append(f"     Inicio: {self._fmt_fecha(soat.get('fechaInicioPoliza'))}")
+                lineas.append(f"     Vencimiento: {self._fmt_fecha(soat.get('fechaVencimSoat'))}")
+                lineas.append(f"     Aseguradora: {soat.get('razonSocialAsegur', 'N/D')}")
+                lineas.append(f"     Estado: {estado}")
         else:
             lineas.append("  Sin información")
         lineas.append("")
