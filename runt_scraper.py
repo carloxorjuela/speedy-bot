@@ -32,11 +32,55 @@ TIPOS_CONSULTA = {
 }
 
 TIPOS_DOCUMENTO = {
-    "CEDULA": "C",
-    "NIT": "N",
-    "PASAPORTE": "P",
-    "EXTRANJERIA": "E",
+    "CEDULA": "C",           # Cédula de Ciudadanía
+    "CC": "C",
+    "NIT": "N",              # NIT
+    "PASAPORTE": "P",        # Pasaporte
+    "PA": "P",
+    "EXTRANJERIA": "E",      # Cédula de Extranjería
+    "CE": "E",
+    "DIPLOMATICO": "D",      # Carnet Diplomático
+    "CD": "D",
+    "CARNET": "D",
+    "PPT": "PPT",            # Permiso por Protección Temporal
+    "PROTECCION": "PPT",
+    "REGISTRO_CIVIL": "RC",  # Registro Civil
+    "RC": "RC",
+    "TARJETA_IDENTIDAD": "TI",  # Tarjeta de Identidad
+    "TI": "TI",
 }
+
+# Mapeo legible para mostrar en mensajes
+NOMBRE_DOCUMENTO = {
+    "C":   "Cédula de Ciudadanía",
+    "N":   "NIT",
+    "P":   "Pasaporte",
+    "E":   "Cédula de Extranjería",
+    "D":   "Carnet Diplomático",
+    "PPT": "Permiso por Protección Temporal",
+    "RC":  "Registro Civil",
+    "TI":  "Tarjeta de Identidad",
+}
+
+
+def normalizar_tipo_documento(tipo: str) -> str:
+    """
+    Acepta código directo ("C", "N", "PPT", "TI", "RC") o alias legibles
+    ("cedula", "CC", "nit", "extranjeria", "CE", etc.).
+    Retorna el código de API que usa RUNT.
+    """
+    tipo_upper = tipo.upper().strip().replace(" ", "_")
+    # Si ya es un código válido de API, devolverlo directo
+    if tipo_upper in NOMBRE_DOCUMENTO:
+        return tipo_upper
+    # Buscar en aliases
+    codigo = TIPOS_DOCUMENTO.get(tipo_upper)
+    if codigo:
+        return codigo
+    raise ValueError(
+        f"Tipo de documento no reconocido: '{tipo}'. "
+        f"Opciones válidas: {', '.join(sorted(set(TIPOS_DOCUMENTO.keys())))}"
+    )
 
 
 class RuntScraper:
@@ -674,17 +718,25 @@ class SimitScraper:
 if __name__ == "__main__":
     import sys
 
-    placa = sys.argv[1] if len(sys.argv) > 1 else "RRC10HGI"
-    cedula = sys.argv[2] if len(sys.argv) > 2 else "1010960147"
+    placa = sys.argv[1] if len(sys.argv) > 1 else "RRC10H"
+    documento = sys.argv[2] if len(sys.argv) > 2 else "1010960147"
+    tipo_raw = sys.argv[3] if len(sys.argv) > 3 else "C"
 
-    print(f"\nConsultando placa: {placa}, cédula: {cedula}\n")
+    try:
+        tipo_doc = normalizar_tipo_documento(tipo_raw)
+    except ValueError as ve:
+        print(f"Error: {ve}")
+        sys.exit(1)
+
+    nombre_doc = NOMBRE_DOCUMENTO.get(tipo_doc, tipo_doc)
+    print(f"\nConsultando placa: {placa}, {nombre_doc}: {documento}\n")
 
     runt = RuntScraper()
     simit = SimitScraper()
 
     try:
         print("--- Consultando RUNT ---")
-        datos = runt.consulta_completa(placa, cedula)
+        datos = runt.consulta_completa(placa, documento, tipo_documento=tipo_doc)
 
         print("\n--- Consultando SIMIT ---")
         datos["simit"] = simit.consultar(placa)

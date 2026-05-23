@@ -1,0 +1,12 @@
+flask>=3.0.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+gspread>=6.0.0
+google-auth>=2.29.0
+ddddocr>=1.4.11
+playwright>=1.44.0
+pypdf>=4.0.0
+Pillow>=10.0.0
+pytesseract>=0.3.10
+pdf2image>=1.16.0
+schedule>=1.2.0
