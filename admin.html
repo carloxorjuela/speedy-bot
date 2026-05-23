@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Speedy Admin</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#1E3A8A', light: '#2563EB', dark: '#172a6e' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Segoe UI', system-ui, sans-serif; }
+    #sidebar { width: 240px; min-width: 240px; }
+    @media (max-width: 768px) {
+      #sidebar { display: none; }
+      #sidebar.open { display: flex; position: fixed; z-index: 50; height: 100vh; }
+    }
+    .nav-link { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 10px;
+      color: #94a3b8; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+    .nav-link:hover, .nav-link.active { background: rgba(255,255,255,0.1); color: white; }
+    .stat-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 10px;
+      border-radius: 9999px; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; }
+    .badge-green { background: #dcfce7; color: #15803d; }
+    .badge-red { background: #fee2e2; color: #dc2626; }
+    .badge-gray { background: #f1f5f9; color: #64748b; }
+    .spinner { border: 3px solid #e5e7eb; border-top-color: #1E3A8A; border-radius: 50%;
+      width: 1.5rem; height: 1.5rem; animation: spin 0.8s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #login-overlay { position: fixed; inset: 0; z-index: 100; background: linear-gradient(135deg, #1E3A8A 0%, #172a6e 100%); }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<!-- ===== LOGIN OVERLAY ===== -->
+<div id="login-overlay" class="flex items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4">
+    <div class="text-center mb-6">
+      <div class="bg-brand/10 rounded-2xl p-4 inline-block mb-3">
+        <i class="fa-solid fa-car text-brand text-4xl"></i>
+      </div>
+      <h1 class="text-2xl font-black text-brand">Speedy Admin</h1>
+      <p class="text-gray-400 text-sm">Panel de administración</p>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Contraseña</label>
+        <input id="login-pass" type="password" placeholder="••••••••••"
+          class="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-brand focus:outline-none transition text-lg"
+          onkeydown="if(event.key==='Enter') doLogin()" />
+      </div>
+      <div id="login-error" class="hidden text-red-600 text-sm text-center font-semibold"></div>
+      <button onclick="doLogin()"
+        class="w-full bg-brand hover:bg-brand-light text-white font-bold py-3 rounded-xl transition flex items-center justify-center gap-2">
+        <i class="fa-solid fa-right-to-bracket"></i> Ingresar
+      </button>
+    </div>
+    <p class="text-center text-gray-300 text-xs mt-4">Speedy &copy; 2026</p>
+  </div>
+</div>
+
+<!-- ===== MAIN LAYOUT ===== -->
+<div id="app" class="hidden flex min-h-screen">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar" class="bg-brand-dark flex-col flex-shrink-0 h-screen sticky top-0 flex">
+    <!-- Logo -->
+    <div class="p-5 border-b border-white/10">
+      <div class="flex items-center gap-3">
+        <div class="bg-white/10 rounded-xl p-2">
+          <i class="fa-solid fa-car text-white text-xl"></i>
+        </div>
+        <div>
+          <p class="text-white font-black text-lg leading-tight">Speedy</p>
+          <p class="text-blue-300 text-xs">Admin Panel</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="flex-1 p-3 space-y-1">
+      <div class="nav-link active" onclick="showSection('dashboard')">
+        <i class="fa-solid fa-chart-line w-4"></i> Dashboard
+      </div>
+      <div class="nav-link" onclick="showSection('consultas')">
+        <i class="fa-solid fa-list-check w-4"></i> Consultas
+      </div>
+      <div class="nav-link" onclick="showSection('configuracion')">
+        <i class="fa-solid fa-gear w-4"></i> Configuración
+      </div>
+      <a href="/placas" class="nav-link block">
+        <i class="fa-solid fa-car w-4"></i> Placas
+      </a>
+    </nav>
+
+    <!-- Logout -->
+    <div class="p-3 border-t border-white/10">
+      <button onclick="doLogout()" class="nav-link w-full hover:bg-red-500/20 hover:text-red-300">
+        <i class="fa-solid fa-right-from-bracket w-4"></i> Cerrar sesión
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="flex-1 flex flex-col min-w-0">
+
+    <!-- TOP BAR -->
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+      <div class="px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <button onclick="toggleSidebar()" class="md:hidden text-gray-500 hover:text-brand">
+            <i class="fa-solid fa-bars text-xl"></i>
+          </button>
+          <div>
+            <h2 id="breadcrumb" class="font-bold text-gray-700">Dashboard</h2>
+            <p class="text-gray-400 text-xs" id="last-updated">Actualizando...</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <div id="api-status" class="flex items-center gap-2 text-sm">
+            <span class="w-2 h-2 rounded-full bg-gray-300"></span>
+            <span class="text-gray-400 hidden sm:inline">Conectando...</span>
+          </div>
+          <button onclick="loadMetrics()" class="bg-brand hover:bg-brand-light text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+            <i class="fa-solid fa-rotate-right"></i>
+            <span class="hidden sm:inline">Actualizar</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- SECTIONS -->
+    <main class="flex-1 p-6 space-y-6">
+
+      <!-- API ALERT -->
+      <div id="api-alert" class="hidden bg-red-50 border border-red-200 rounded-xl p-4 flex items-center gap-3">
+        <i class="fa-solid fa-circle-exclamation text-red-500 text-xl"></i>
+        <div>
+          <p class="font-bold text-red-700">API desconectada</p>
+          <p class="text-red-600 text-sm">No se puede conectar con el servidor. Verifica que la API esté ejecutándose en <code class="bg-red-100 px-1 rounded" id="api-url-display"></code></p>
+        </div>
+      </div>
+
+      <!-- DASHBOARD SECTION -->
+      <div id="section-dashboard">
+
+        <!-- Stats Row -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div class="stat-card">
+            <div class="flex items-center justify-between mb-3">
+              <p class="text-gray-400 text-sm font-semibold">Total Consultas</p>
+              <div class="bg-blue-50 rounded-xl p-2"><i class="fa-solid fa-person text-brand-light"></i></div>
+            </div>
+            <p id="stat-total" class="text-3xl font-black text-gray-800">—</p>
+            <p class="text-gray-400 text-xs mt-1">Historial completo</p>
+          </div>
+          <div class="stat-card">
+            <div class="flex items-center justify-between mb-3">
+              <p class="text-gray-400 text-sm font-semibold">Consultas Hoy</p>
+              <div class="bg-green-50 rounded-xl p-2"><i class="fa-solid fa-calendar-day text-green-600"></i></div>
+            </div>
+            <p id="stat-hoy" class="text-3xl font-black text-gray-800">—</p>
+            <p class="text-gray-400 text-xs mt-1">Desde las 00:00</p>
+          </div>
+          <div class="stat-card">
+            <div class="flex items-center justify-between mb-3">
+              <p class="text-gray-400 text-sm font-semibold">Tasa de Éxito</p>
+              <div class="bg-amber-50 rounded-xl p-2"><i class="fa-solid fa-circle-check text-amber-500"></i></div>
+            </div>
+            <p id="stat-exito" class="text-3xl font-black text-gray-800">—</p>
+            <p class="text-gray-400 text-xs mt-1">Consultas exitosas</p>
+          </div>
+          <div class="stat-card">
+            <div class="flex items-center justify-between mb-3">
+              <p class="text-gray-400 text-sm font-semibold">Tiempo Promedio</p>
+              <div class="bg-purple-50 rounded-xl p-2"><i class="fa-solid fa-clock text-purple-500"></i></div>
+            </div>
+            <p id="stat-tiempo" class="text-3xl font-black text-gray-800">—</p>
+            <p class="text-gray-400 text-xs mt-1">Milisegundos</p>
+          </div>
+        </div>
+
+        <!-- Charts Row 1 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm p-5">
+            <h3 class="font-bold text-gray-700 mb-4 flex items-center gap-2">
+              <i class="fa-solid fa-chart-line text-brand-light"></i> Consultas por Día — últimos 7 días
+            </h3>
+            <canvas id="chart-diario" height="220"></canvas>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm p-5">
+            <h3 class="font-bold text-gray-700 mb-4 flex items-center gap-2">
+              <i class="fa-solid fa-chart-pie text-brand-light"></i> Éxito vs Error
+            </h3>
+            <canvas id="chart-donut" height="220"></canvas>
+            <div id="donut-legend" class="flex gap-4 justify-center mt-3 text-xs"></div>
+          </div>
+        </div>
+
+        <!-- Charts Row 2 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="bg-white rounded-2xl shadow-sm p-5">
+            <h3 class="font-bold text-gray-700 mb-4 flex items-center gap-2">
+              <i class="fa-solid fa-trophy text-amber-500"></i> Top 10 Placas
+            </h3>
+            <canvas id="chart-placas" height="260"></canvas>
+          </div>
+          <div class="bg-white rounded-2xl shadow-sm p-5">
+            <h3 class="font-bold text-gray-700 mb-4 flex items-center gap-2">
+              <i class="fa-solid fa-clock text-brand-light"></i> Consultas por Hora
+            </h3>
+            <canvas id="chart-horas" height="260"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONSULTAS SECTION -->
+      <div id="section-consultas" class="hidden">
+        <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+          <div class="p-5 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
+            <h3 class="font-bold text-gray-700 flex items-center gap-2">
+              <i class="fa-solid fa-list-check text-brand-light"></i> Últimas Consultas
+            </h3>
+            <div class="flex gap-2 items-center">
+              <span id="log-count" class="text-gray-400 text-sm"></span>
+              <button onclick="loadLogs(1)" class="text-brand text-sm hover:underline">
+                <i class="fa-solid fa-rotate-right mr-1"></i>Actualizar
+              </button>
+            </div>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="bg-gray-50 text-left">
+                  <th class="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">ID</th>
+                  <th class="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Fecha/Hora</th>
+                  <th class="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Placa</th>
+                  <th class="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Cédula</th>
+                  <th class="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Estado</th>
+                  <th class="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">Tiempo</th>
+                  <th class="px-4 py-3 text-xs font-bold text-gray-400 uppercase tracking-wide">IP</th>
+                </tr>
+              </thead>
+              <tbody id="logs-tbody">
+                <tr><td colspan="7" class="text-center py-8 text-gray-400">Cargando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="p-4 flex items-center justify-between border-t border-gray-100">
+            <button id="btn-prev" onclick="changePage(-1)"
+              class="text-sm text-brand hover:underline disabled:text-gray-300 disabled:cursor-not-allowed" disabled>
+              <i class="fa-solid fa-chevron-left mr-1"></i> Anterior
+            </button>
+            <span id="page-info" class="text-gray-400 text-sm">Página 1</span>
+            <button id="btn-next" onclick="changePage(1)"
+              class="text-sm text-brand hover:underline disabled:text-gray-300 disabled:cursor-not-allowed">
+              Siguiente <i class="fa-solid fa-chevron-right ml-1"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CONFIG SECTION -->
+      <div id="section-configuracion" class="hidden">
+        <div class="bg-white rounded-2xl shadow-sm p-6 max-w-xl">
+          <h3 class="font-bold text-gray-700 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-gear text-brand-light"></i> Configuración
+          </h3>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">URL de la API</label>
+              <input id="cfg-api-url" type="text" value=""
+                class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:border-brand focus:outline-none transition text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Admin Key</label>
+              <input id="cfg-admin-key" type="text" value=""
+                class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:border-brand focus:outline-none transition text-sm font-mono" />
+            </div>
+            <button onclick="saveConfig()"
+              class="bg-brand hover:bg-brand-light text-white font-bold px-6 py-2.5 rounded-xl transition text-sm flex items-center gap-2">
+              <i class="fa-solid fa-floppy-disk"></i> Guardar y Reconectar
+            </button>
+            <div id="cfg-msg" class="hidden text-green-600 text-sm font-semibold">
+              <i class="fa-solid fa-circle-check mr-1"></i> Configuración guardada
+            </div>
+          </div>
+          <div class="mt-6 pt-6 border-t border-gray-100">
+            <h4 class="font-bold text-gray-700 text-sm mb-3">Cambiar Contraseña (local)</h4>
+            <div class="space-y-3">
+              <input id="cfg-new-pass" type="password" placeholder="Nueva contraseña"
+                class="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 focus:border-brand focus:outline-none transition text-sm" />
+              <button onclick="changePassword()"
+                class="bg-gray-600 hover:bg-gray-700 text-white font-bold px-6 py-2.5 rounded-xl transition text-sm">
+                Cambiar
+              </button>
+              <div id="pass-msg" class="hidden text-green-600 text-sm font-semibold">
+                <i class="fa-solid fa-circle-check mr-1"></i> Contraseña actualizada
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIGURATION (editable at runtime via Config section)
+// ============================================================
+const DEFAULT_PASSWORD = 'speedy2026';
+const DEFAULT_API_URL  = 'http://localhost:8080';
+const DEFAULT_ADMIN_KEY = 'speedy-admin-2026';
+const PER_PAGE = 50;
+
+// ============================================================
+// RUNTIME STATE
+// ============================================================
+let API_URL   = sessionStorage.getItem('cp_api_url')  || DEFAULT_API_URL;
+let ADMIN_KEY = sessionStorage.getItem('cp_admin_key') || DEFAULT_ADMIN_KEY;
+let PASSWORD  = sessionStorage.getItem('cp_password')  || DEFAULT_PASSWORD;
+
+let currentPage = 1;
+let totalLogs   = 0;
+let charts = {};
+let refreshTimer = null;
+
+// ============================================================
+// LOGIN
+// ============================================================
+function doLogin() {
+  const pass = document.getElementById('login-pass').value;
+  if (pass === PASSWORD) {
+    sessionStorage.setItem('cp_authed', '1');
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('app').classList.remove('hidden');
+    initDashboard();
+  } else {
+    const err = document.getElementById('login-error');
+    err.textContent = 'Contraseña incorrecta';
+    err.classList.remove('hidden');
+    document.getElementById('login-pass').value = '';
+    setTimeout(() => err.classList.add('hidden'), 3000);
+  }
+}
+
+function doLogout() {
+  sessionStorage.removeItem('cp_authed');
+  location.reload();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function initDashboard() {
+  document.getElementById('api-url-display').textContent = API_URL;
+  document.getElementById('cfg-api-url').value = API_URL;
+  document.getElementById('cfg-admin-key').value = ADMIN_KEY;
+  loadMetrics();
+  loadLogs(1);
+  // Auto-refresh every 60 seconds
+  refreshTimer = setInterval(() => {
+    loadMetrics();
+    loadLogs(currentPage);
+  }, 60000);
+}
+
+// Auto-login if already authed in this session
+window.addEventListener('DOMContentLoaded', () => {
+  if (sessionStorage.getItem('cp_authed')) {
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('app').classList.remove('hidden');
+    initDashboard();
+  }
+});
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function showSection(name) {
+  ['dashboard', 'consultas', 'configuracion'].forEach(s => {
+    document.getElementById(`section-${s}`).classList.toggle('hidden', s !== name);
+  });
+  document.getElementById('breadcrumb').textContent = {
+    dashboard: 'Dashboard', consultas: 'Consultas', configuracion: 'Configuración'
+  }[name];
+  document.querySelectorAll('.nav-link').forEach((el, i) => {
+    el.classList.toggle('active', ['dashboard','consultas','configuracion'][i] === name);
+  });
+  if (name === 'consultas') loadLogs(1);
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ============================================================
+// CONFIG
+// ============================================================
+function saveConfig() {
+  API_URL   = document.getElementById('cfg-api-url').value.trim().replace(/\/$/, '');
+  ADMIN_KEY = document.getElementById('cfg-admin-key').value.trim();
+  sessionStorage.setItem('cp_api_url', API_URL);
+  sessionStorage.setItem('cp_admin_key', ADMIN_KEY);
+  document.getElementById('api-url-display').textContent = API_URL;
+  const msg = document.getElementById('cfg-msg');
+  msg.classList.remove('hidden');
+  setTimeout(() => msg.classList.add('hidden'), 3000);
+  loadMetrics();
+  loadLogs(1);
+}
+
+function changePassword() {
+  const np = document.getElementById('cfg-new-pass').value;
+  if (!np || np.length < 4) { alert('Contraseña muy corta (mín 4 caracteres)'); return; }
+  PASSWORD = np;
+  sessionStorage.setItem('cp_password', np);
+  document.getElementById('cfg-new-pass').value = '';
+  const msg = document.getElementById('pass-msg');
+  msg.classList.remove('hidden');
+  setTimeout(() => msg.classList.add('hidden'), 3000);
+}
+
+// ============================================================
+// API HELPERS
+// ============================================================
+async function apiGet(path) {
+  const resp = await fetch(`${API_URL}${path}`, {
+    headers: { 'X-Admin-Key': ADMIN_KEY }
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return resp.json();
+}
+
+function setApiStatus(ok) {
+  const el = document.getElementById('api-status');
+  const alert = document.getElementById('api-alert');
+  if (ok) {
+    el.innerHTML = '<span class="w-2 h-2 rounded-full bg-green-500"></span><span class="text-green-600 hidden sm:inline font-semibold text-sm">API conectada</span>';
+    alert.classList.add('hidden');
+  } else {
+    el.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-500"></span><span class="text-red-600 hidden sm:inline font-semibold text-sm">API desconectada</span>';
+    alert.classList.remove('hidden');
+  }
+}
+
+// ============================================================
+// METRICS
+// ============================================================
+async function loadMetrics() {
+  document.getElementById('last-updated').textContent = 'Actualizando...';
+  try {
+    const data = await apiGet('/admin/metrics');
+    setApiStatus(true);
+    renderMetrics(data);
+    document.getElementById('last-updated').textContent =
+      'Actualizado: ' + new Date().toLocaleTimeString('es-CO');
+  } catch (e) {
+    setApiStatus(false);
+    document.getElementById('last-updated').textContent = 'Error al cargar';
+  }
+}
+
+function renderMetrics(d) {
+  // Stats cards
+  document.getElementById('stat-total').textContent  = (d.total_consultas ?? '—').toLocaleString('es-CO');
+  document.getElementById('stat-hoy').textContent    = (d.consultas_hoy ?? '—').toLocaleString('es-CO');
+  document.getElementById('stat-exito').textContent  = d.tasa_exito != null ? d.tasa_exito.toFixed(1) + '%' : '—';
+  document.getElementById('stat-tiempo').textContent = d.tiempo_promedio_ms != null ? d.tiempo_promedio_ms + ' ms' : '—';
+
+  // Line chart: consultas por día
+  const dias = (d.consultas_por_dia || []);
+  renderLineChart(
+    'chart-diario',
+    dias.map(x => x.dia),
+    [
+      { label: 'Total',    data: dias.map(x => x.total),    color: '#2563EB' },
+      { label: 'Exitosas', data: dias.map(x => x.exitosas), color: '#16a34a' },
+    ]
+  );
+
+  // Donut chart
+  const exitosas = d.total_consultas && d.tasa_exito != null
+    ? Math.round(d.total_consultas * d.tasa_exito / 100) : 0;
+  const errores = (d.total_consultas || 0) - exitosas;
+  renderDonutChart('chart-donut', exitosas, errores);
+
+  // Top placas
+  const placas = (d.top_placas || []).slice(0, 10);
+  renderBarHChart('chart-placas', placas.map(p => p.placa), placas.map(p => p.consultas));
+
+  // Por hora
+  const horas = d.consultas_por_hora || [];
+  // Fill missing hours
+  const horasData = Array.from({length: 24}, (_, i) => {
+    const h = i.toString().padStart(2, '0') + ':00';
+    const found = horas.find(x => x.hora === h || x.hora === String(i));
+    return found ? found.n : 0;
+  });
+  renderBarChart('chart-horas',
+    Array.from({length: 24}, (_, i) => i + 'h'),
+    horasData);
+}
+
+// ============================================================
+// CHARTS
+// ============================================================
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function renderLineChart(id, labels, datasets) {
+  destroyChart(id);
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: datasets.map(ds => ({
+        label: ds.label,
+        data: ds.data,
+        borderColor: ds.color,
+        backgroundColor: ds.color + '22',
+        tension: 0.4,
+        fill: true,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+      }))
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'top', labels: { font: { size: 11 } } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+        y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+function renderDonutChart(id, exitosas, errores) {
+  destroyChart(id);
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Exitosas', 'Errores'],
+      datasets: [{
+        data: [exitosas, errores],
+        backgroundColor: ['#16a34a', '#dc2626'],
+        borderWidth: 0,
+        hoverOffset: 8,
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '65%',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}` } }
+      }
+    }
+  });
+  document.getElementById('donut-legend').innerHTML = `
+    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-green-600 inline-block"></span>Exitosas: ${exitosas}</span>
+    <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-600 inline-block"></span>Errores: ${errores}</span>`;
+}
+
+function renderBarHChart(id, labels, data) {
+  destroyChart(id);
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Consultas',
+        data,
+        backgroundColor: '#2563EB',
+        borderRadius: 6,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } },
+        y: { grid: { display: false }, ticks: { font: { size: 11, weight: '600' } } }
+      }
+    }
+  });
+}
+
+function renderBarChart(id, labels, data) {
+  destroyChart(id);
+  const ctx = document.getElementById(id).getContext('2d');
+  charts[id] = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Consultas',
+        data,
+        backgroundColor: '#818cf8',
+        borderRadius: 4,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 9 }, maxRotation: 0 } },
+        y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } }
+      }
+    }
+  });
+}
+
+// ============================================================
+// LOGS TABLE
+// ============================================================
+async function loadLogs(page) {
+  currentPage = page;
+  const tbody = document.getElementById('logs-tbody');
+  tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-gray-400"><div class="spinner mx-auto"></div></td></tr>';
+  try {
+    const data = await apiGet(`/admin/logs?page=${page}&per_page=${PER_PAGE}`);
+    totalLogs = data.total || 0;
+    renderLogsTable(data.logs || []);
+    updatePagination();
+    document.getElementById('log-count').textContent = `${totalLogs.toLocaleString('es-CO')} registros`;
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-red-400">Error al cargar logs</td></tr>';
+  }
+}
+
+function renderLogsTable(logs) {
+  const tbody = document.getElementById('logs-tbody');
+  if (!logs.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center py-8 text-gray-400 italic">Sin registros</td></tr>';
+    return;
+  }
+  tbody.innerHTML = logs.map(r => `
+    <tr class="border-b border-gray-50 hover:bg-gray-50 transition">
+      <td class="px-4 py-3 text-gray-400 text-sm font-mono">#${r.id}</td>
+      <td class="px-4 py-3 text-gray-600 text-sm whitespace-nowrap">${fmtDatetime(r.timestamp)}</td>
+      <td class="px-4 py-3 font-bold text-brand tracking-widest text-sm">${r.placa || '—'}</td>
+      <td class="px-4 py-3 text-gray-500 text-sm font-mono">${r.cedula_masked || '—'}</td>
+      <td class="px-4 py-3">
+        ${r.success
+          ? '<span class="badge badge-green"><i class="fa-solid fa-check"></i> Exitosa</span>'
+          : '<span class="badge badge-red"><i class="fa-solid fa-xmark"></i> Error</span>'}
+      </td>
+      <td class="px-4 py-3 text-gray-500 text-sm">${r.response_time_ms != null ? r.response_time_ms + ' ms' : '—'}</td>
+      <td class="px-4 py-3 text-gray-400 text-xs font-mono">${r.ip || '—'}</td>
+    </tr>`).join('');
+}
+
+function fmtDatetime(str) {
+  if (!str) return '—';
+  try {
+    const d = new Date(str.replace(' ', 'T'));
+    return d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+      ' ' + d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  } catch { return str; }
+}
+
+function updatePagination() {
+  const totalPages = Math.ceil(totalLogs / PER_PAGE);
+  document.getElementById('page-info').textContent = `Página ${currentPage} de ${Math.max(1, totalPages)}`;
+  document.getElementById('btn-prev').disabled = currentPage <= 1;
+  document.getElementById('btn-next').disabled = currentPage >= totalPages;
+}
+
+function changePage(delta) {
+  const totalPages = Math.ceil(totalLogs / PER_PAGE);
+  const newPage = currentPage + delta;
+  if (newPage < 1 || newPage > totalPages) return;
+  loadLogs(newPage);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+# Base de datos local (datos de uso, no subir)
+carplus.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Imágenes de debug captcha
+captcha_debug.png
+captcha_sample.png
+captcha_test.png
+
+# Variables de entorno
+.env
+.env.*
+
+# Binarios grandes
+cloudflared.exe
+
+# Archivos JS pesados del portal SIMIT (>500KB, no necesarios en repo)
+chunk_961.js
+simit_app.js
+
+# Datos de test
+test_state.json
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

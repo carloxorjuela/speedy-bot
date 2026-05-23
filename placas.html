@@ -1,0 +1,1441 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Speedy — Gestión de Placas</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#1E3A8A', light: '#2563EB', dark: '#172a6e' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Segoe UI', system-ui, sans-serif; }
+    #sidebar { width: 240px; min-width: 240px; }
+    @media (max-width: 768px) {
+      #sidebar { display: none; }
+      #sidebar.open { display: flex; position: fixed; z-index: 50; height: 100vh; }
+      .col-hide-mobile { display: none !important; }
+    }
+    .nav-link { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 10px;
+      color: #94a3b8; font-size: 0.875rem; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+    .nav-link:hover, .nav-link.active { background: rgba(255,255,255,0.1); color: white; }
+    .stat-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+    .spinner { border: 3px solid #e5e7eb; border-top-color: #1E3A8A; border-radius: 50%;
+      width: 1.5rem; height: 1.5rem; animation: spin 0.8s linear infinite; display: inline-block; }
+    .spinner-lg { border: 4px solid #e5e7eb; border-top-color: #1E3A8A; border-radius: 50%;
+      width: 2.5rem; height: 2.5rem; animation: spin 0.8s linear infinite; display: inline-block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #login-overlay { position: fixed; inset: 0; z-index: 100; background: linear-gradient(135deg, #1E3A8A 0%, #172a6e 100%); }
+    .modal-overlay { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+    .modal-card { background: white; border-radius: 1.25rem; box-shadow: 0 20px 60px rgba(0,0,0,0.25); width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
+    .modal-card-lg { max-width: 820px; }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { background: #e2e8f0; }
+    th.sort-asc::after  { content: ' ↑'; color: #2563EB; }
+    th.sort-desc::after { content: ' ↓'; color: #2563EB; }
+    .badge-pill { display: inline-flex; align-items: center; padding: 2px 8px;
+      border-radius: 9999px; font-size: 0.68rem; font-weight: 700; white-space: nowrap; }
+    .badge-vencido  { background: #fee2e2; color: #dc2626; }
+    .badge-proximo  { background: #fef3c7; color: #d97706; }
+    .badge-vigente  { background: #dcfce7; color: #15803d; }
+    .badge-sin_dato { background: #f1f5f9; color: #64748b; }
+    .row-vencido { border-left: 4px solid #ef4444; }
+    .row-proximo { border-left: 4px solid #f59e0b; }
+    .detail-section { margin-bottom: 1.25rem; }
+    .detail-section h4 { font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.4rem; margin-bottom: 0.75rem; }
+    .detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.6rem; }
+    .detail-item label { display: block; font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: #94a3b8; margin-bottom: 2px; }
+    .detail-item span  { font-size: 0.82rem; color: #1e293b; font-weight: 600; }
+    .doc-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; padding: 0.6rem 0;
+      border-bottom: 1px solid #f1f5f9; align-items: center; }
+    .doc-row:last-child { border-bottom: none; }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<!-- ===== LOGIN OVERLAY ===== -->
+<div id="login-overlay" class="flex items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-sm mx-4">
+    <div class="text-center mb-6">
+      <div class="bg-brand/10 rounded-2xl p-4 inline-block mb-3">
+        <i class="fa-solid fa-car text-brand text-4xl"></i>
+      </div>
+      <h1 class="text-2xl font-black text-brand">Speedy</h1>
+      <p class="text-gray-400 text-sm">Gestión de Placas</p>
+    </div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Contraseña</label>
+        <input id="login-pass" type="password" placeholder="••••••••••"
+          class="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-brand focus:outline-none transition text-lg"
+          onkeydown="if(event.key==='Enter') doLogin()" />
+      </div>
+      <div id="login-error" class="hidden text-red-600 text-sm text-center font-semibold"></div>
+      <button onclick="doLogin()"
+        class="w-full bg-brand hover:bg-brand-light text-white font-bold py-3 rounded-xl transition flex items-center justify-center gap-2">
+        <i class="fa-solid fa-right-to-bracket"></i> Ingresar
+      </button>
+    </div>
+    <p class="text-center text-gray-300 text-xs mt-4">Speedy &copy; 2026</p>
+  </div>
+</div>
+
+<!-- ===== MAIN LAYOUT ===== -->
+<div id="app" class="hidden flex min-h-screen">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar" class="bg-brand-dark flex-col flex-shrink-0 h-screen sticky top-0 flex" style="background:#172a6e;">
+    <!-- Logo -->
+    <div class="p-5 border-b border-white/10">
+      <div class="flex items-center gap-3">
+        <div class="bg-white/10 rounded-xl p-2">
+          <i class="fa-solid fa-car text-white text-xl"></i>
+        </div>
+        <div>
+          <p class="text-white font-black text-lg leading-tight">Speedy</p>
+          <p class="text-blue-300 text-xs">Placas</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="flex-1 p-3 space-y-1">
+      <a href="/admin" class="nav-link">
+        <i class="fa-solid fa-chart-line w-4"></i> Dashboard
+      </a>
+      <div class="nav-link active">
+        <i class="fa-solid fa-id-card w-4"></i> Placas
+      </div>
+      <a href="/" class="nav-link">
+        <i class="fa-solid fa-magnifying-glass w-4"></i> Consulta
+      </a>
+    </nav>
+
+    <!-- Status + Logout -->
+    <div class="p-3 border-t border-white/10 space-y-1">
+      <div id="sidebar-status" class="flex items-center gap-2 px-3 py-2 text-xs text-slate-400">
+        <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-500 flex-shrink-0"></span>
+        <span id="status-text">Conectando...</span>
+      </div>
+      <button onclick="doLogout()" class="nav-link w-full hover:bg-red-500/20 hover:text-red-300">
+        <i class="fa-solid fa-right-from-bracket w-4"></i> Cerrar sesión
+      </button>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <div class="flex-1 flex flex-col min-w-0">
+
+    <!-- TOP BAR -->
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+      <div class="px-6 py-4 flex items-center justify-between flex-wrap gap-3">
+        <div class="flex items-center gap-3">
+          <button onclick="toggleSidebar()" class="md:hidden text-gray-500 hover:text-brand">
+            <i class="fa-solid fa-bars text-xl"></i>
+          </button>
+          <div>
+            <h2 class="font-bold text-gray-700 text-lg">Gestion de Placas</h2>
+            <p class="text-gray-400 text-xs">Monitoreo de documentos vehiculares</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="loadPlacas()" id="btn-refresh"
+            class="bg-white border-2 border-gray-200 hover:border-brand text-gray-600 hover:text-brand px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+            <i class="fa-solid fa-rotate-right"></i>
+            <span class="hidden sm:inline">Actualizar</span>
+          </button>
+          <button onclick="exportExcel()"
+            class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+            <i class="fa-solid fa-file-excel"></i>
+            <span class="hidden sm:inline">Exportar Excel</span>
+          </button>
+          <button onclick="openAddModal()"
+            class="bg-brand hover:bg-brand-light text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+            <i class="fa-solid fa-plus"></i>
+            <span class="hidden sm:inline">Nueva Consulta</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN -->
+    <main class="flex-1 p-4 md:p-6 space-y-5">
+
+      <!-- STATS ROW -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Total -->
+        <div class="stat-card">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-gray-400 text-xs font-semibold uppercase tracking-wide">Total Placas</p>
+            <div class="bg-blue-50 rounded-xl p-2"><i class="fa-solid fa-car text-blue-500"></i></div>
+          </div>
+          <p id="stat-total" class="text-3xl font-black text-gray-800">—</p>
+          <p class="text-gray-400 text-xs mt-1">Registradas</p>
+        </div>
+        <!-- Vencidos -->
+        <div class="stat-card">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-gray-400 text-xs font-semibold uppercase tracking-wide">Con Vencidos</p>
+            <div class="bg-red-50 rounded-xl p-2"><i class="fa-solid fa-circle-exclamation text-red-500"></i></div>
+          </div>
+          <p id="stat-vencidos" class="text-3xl font-black text-red-600">—</p>
+          <p class="text-gray-400 text-xs mt-1">Documentos expirados</p>
+        </div>
+        <!-- Proximos -->
+        <div class="stat-card">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-gray-400 text-xs font-semibold uppercase tracking-wide">Proximos &le;30d</p>
+            <div class="bg-amber-50 rounded-xl p-2"><i class="fa-solid fa-clock text-amber-500"></i></div>
+          </div>
+          <p id="stat-proximos" class="text-3xl font-black text-amber-600">—</p>
+          <p class="text-gray-400 text-xs mt-1">Proximos a vencer</p>
+        </div>
+        <!-- Sin multas -->
+        <div class="stat-card">
+          <div class="flex items-center justify-between mb-3">
+            <p class="text-gray-400 text-xs font-semibold uppercase tracking-wide">Sin Multas</p>
+            <div class="bg-green-50 rounded-xl p-2"><i class="fa-solid fa-shield-halved text-green-600"></i></div>
+          </div>
+          <p id="stat-sinmultas" class="text-3xl font-black text-green-700">—</p>
+          <p class="text-gray-400 text-xs mt-1">Paz y salvo SIMIT</p>
+        </div>
+      </div>
+
+      <!-- FILTERS -->
+      <div class="bg-white rounded-2xl shadow-sm p-4">
+        <div class="flex flex-wrap gap-3 items-center">
+          <div class="flex-1 min-w-[200px] relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+            <input id="filter-search" type="text" placeholder="Buscar placa o vehiculo..."
+              class="w-full pl-9 pr-4 py-2 border-2 border-gray-200 rounded-xl text-sm focus:border-brand focus:outline-none transition"
+              oninput="applyFilters()" />
+          </div>
+          <select id="filter-estado" onchange="applyFilters()"
+            class="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-brand focus:outline-none transition bg-white text-gray-700 font-medium">
+            <option value="">Estado general: Todos</option>
+            <option value="vencidos">Con vencidos</option>
+            <option value="proximos">Proximos a vencer</option>
+            <option value="aldia">Al dia</option>
+          </select>
+          <select id="filter-doc" onchange="applyFilters()"
+            class="border-2 border-gray-200 rounded-xl px-3 py-2 text-sm focus:border-brand focus:outline-none transition bg-white text-gray-700 font-medium">
+            <option value="">Filtrar doc: Todos</option>
+            <option value="soat_vencido">SOAT vencido</option>
+            <option value="rtm_vencido">RTM vencido</option>
+            <option value="simit_multas">SIMIT con multas</option>
+          </select>
+          <span id="filter-count" class="text-gray-400 text-sm font-medium whitespace-nowrap"></span>
+        </div>
+      </div>
+
+      <!-- TABLE CARD -->
+      <div class="bg-white rounded-2xl shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-gray-50 text-left border-b border-gray-200">
+                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide sortable" onclick="sortBy('placa')">
+                  Placa
+                </th>
+                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide sortable" onclick="sortBy('marca')">
+                  Vehiculo
+                </th>
+                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide sortable" onclick="sortBy('estado_vehiculo')">
+                  Estado
+                </th>
+                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide sortable" onclick="sortBy('soat_vence')">
+                  SOAT
+                </th>
+                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide sortable" onclick="sortBy('rtm_vence')">
+                  RTM/Tecno
+                </th>
+                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide sortable col-hide-mobile" onclick="sortBy('rc_vence')">
+                  Resp. Civil
+                </th>
+                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide sortable" onclick="sortBy('simit_paz_salvo')">
+                  SIMIT
+                </th>
+                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide sortable col-hide-mobile" onclick="sortBy('tarjeta_op_vence')">
+                  T. Operacion
+                </th>
+                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide sortable" onclick="sortBy('ultima_consulta')">
+                  Ultima consulta
+                </th>
+                <th class="px-4 py-3 text-xs font-bold text-gray-500 uppercase tracking-wide text-center">
+                  Acciones
+                </th>
+              </tr>
+            </thead>
+            <tbody id="placas-tbody">
+              <tr>
+                <td colspan="10" class="text-center py-16 text-gray-400">
+                  <div class="spinner-lg mx-auto mb-3"></div>
+                  <p>Cargando placas...</p>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ===== MODAL: NUEVA CONSULTA ===== -->
+<div id="modal-add" class="modal-overlay hidden">
+  <div class="modal-card">
+    <div class="p-6 border-b border-gray-100 flex items-center justify-between">
+      <div>
+        <h3 class="font-bold text-gray-800 text-lg flex items-center gap-2">
+          <i class="fa-solid fa-plus-circle text-brand"></i> Agregar / Actualizar Placa
+        </h3>
+        <p class="text-gray-400 text-sm mt-0.5">Consulta RUNT + SIMIT para una nueva placa</p>
+      </div>
+      <button onclick="closeAddModal()" class="text-gray-400 hover:text-gray-600 text-xl p-1">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div class="p-6 space-y-4">
+      <!-- Form -->
+      <div id="add-form">
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Placa</label>
+            <input id="add-placa" type="text" placeholder="Ej. RRC10H"
+              maxlength="7"
+              class="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-brand focus:outline-none transition font-mono text-lg tracking-widest uppercase"
+              oninput="this.value=this.value.toUpperCase()"
+              onkeydown="if(event.key==='Enter') document.getElementById('add-cedula').focus()" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Cedula del propietario</label>
+            <input id="add-cedula" type="text" placeholder="Numero de cedula"
+              class="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:border-brand focus:outline-none transition"
+              onkeydown="if(event.key==='Enter') submitAddPlate()" />
+          </div>
+          <div id="add-error" class="hidden bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2">
+            <i class="fa-solid fa-circle-exclamation text-red-500 mt-0.5 flex-shrink-0"></i>
+            <p id="add-error-msg" class="text-red-700 text-sm"></p>
+          </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+          <button onclick="closeAddModal()"
+            class="flex-1 border-2 border-gray-200 text-gray-600 font-semibold py-3 rounded-xl hover:border-gray-300 transition">
+            Cancelar
+          </button>
+          <button onclick="submitAddPlate()"
+            class="flex-1 bg-brand hover:bg-brand-light text-white font-bold py-3 rounded-xl transition flex items-center justify-center gap-2">
+            <i class="fa-solid fa-magnifying-glass"></i> Consultar RUNT+SIMIT
+          </button>
+        </div>
+      </div>
+
+      <!-- Loading state -->
+      <div id="add-loading" class="hidden text-center py-8">
+        <div class="spinner-lg mx-auto mb-4"></div>
+        <p class="font-semibold text-gray-700">Consultando...</p>
+        <p class="text-gray-400 text-sm mt-1">Puede tardar hasta 50 segundos</p>
+        <p class="text-gray-300 text-xs mt-3">Conectando con RUNT y SIMIT Colombia</p>
+      </div>
+
+      <!-- Success state -->
+      <div id="add-success" class="hidden text-center py-8">
+        <div class="bg-green-50 rounded-full p-4 inline-block mb-4">
+          <i class="fa-solid fa-circle-check text-green-500 text-4xl"></i>
+        </div>
+        <p class="font-bold text-gray-800 text-lg" id="add-success-msg">Placa agregada exitosamente</p>
+        <p class="text-gray-400 text-sm mt-1">Cerrando automaticamente...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: VER DETALLES ===== -->
+<div id="modal-detail" class="modal-overlay hidden">
+  <div class="modal-card modal-card-lg">
+    <div class="p-5 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10">
+      <div>
+        <h3 class="font-bold text-gray-800 text-lg flex items-center gap-2">
+          <i class="fa-solid fa-car text-brand"></i>
+          <span id="detail-title">Detalles del Vehiculo</span>
+        </h3>
+        <p class="text-gray-400 text-xs mt-0.5">Informacion completa RUNT &amp; SIMIT</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="detail-pdf-btn" onclick="generatePDFFromModal()"
+          class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+          <i class="fa-solid fa-file-pdf"></i>
+          <span class="hidden sm:inline">Descargar PDF</span>
+        </button>
+        <button onclick="closeDetailModal()" class="text-gray-400 hover:text-gray-600 text-xl p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+    </div>
+    <div id="detail-body" class="p-5">
+      <div class="text-center py-12">
+        <div class="spinner-lg mx-auto mb-3"></div>
+        <p class="text-gray-400">Cargando datos...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONSTANTS
+// ============================================================
+const API_URL    = 'http://localhost:8080';
+const ADMIN_KEY  = 'speedy-admin-2026';
+const ADMIN_PASS = 'speedy2026';
+
+// ============================================================
+// STATE
+// ============================================================
+let allPlacas      = [];   // raw data from API
+let filteredPlacas = [];   // after filters applied
+let fullDataCache  = {};   // placa -> datos (lazy loaded)
+let sortCol        = 'ultima_consulta';
+let sortDir        = -1;   // -1 = desc (newest first), 1 = asc
+let currentDetailPlaca = null;
+let currentDetailDatos = null;
+let refreshTimer   = null;
+
+// ============================================================
+// LOGIN
+// ============================================================
+function doLogin() {
+  const pass = document.getElementById('login-pass').value;
+  if (pass === ADMIN_PASS) {
+    sessionStorage.setItem('cp_auth', '1');
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('app').classList.remove('hidden');
+    document.getElementById('app').style.display = 'flex';
+    initApp();
+  } else {
+    const err = document.getElementById('login-error');
+    err.textContent = 'Contrasena incorrecta';
+    err.classList.remove('hidden');
+    document.getElementById('login-pass').value = '';
+    setTimeout(() => err.classList.add('hidden'), 3000);
+  }
+}
+
+function doLogout() {
+  sessionStorage.removeItem('cp_auth');
+  if (refreshTimer) clearInterval(refreshTimer);
+  location.reload();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function initApp() {
+  loadPlacas();
+  refreshTimer = setInterval(loadPlacas, 120000);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  if (sessionStorage.getItem('cp_auth')) {
+    document.getElementById('login-overlay').style.display = 'none';
+    document.getElementById('app').classList.remove('hidden');
+    document.getElementById('app').style.display = 'flex';
+    initApp();
+  }
+});
+
+// ============================================================
+// SIDEBAR / LAYOUT
+// ============================================================
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+function setConnectionStatus(ok) {
+  const dot  = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  if (ok) {
+    dot.className  = 'w-2 h-2 rounded-full bg-green-400 flex-shrink-0';
+    text.textContent = 'API conectada';
+    text.className = 'text-green-400 text-xs';
+  } else {
+    dot.className  = 'w-2 h-2 rounded-full bg-red-400 flex-shrink-0';
+    text.textContent = 'API desconectada';
+    text.className = 'text-red-400 text-xs';
+  }
+}
+
+// ============================================================
+// DATA LOADING
+// ============================================================
+async function loadPlacas() {
+  const btn = document.getElementById('btn-refresh');
+  btn.classList.add('opacity-60', 'pointer-events-none');
+  try {
+    const resp = await fetch(`${API_URL}/admin/placas`, {
+      headers: { 'X-Admin-Key': ADMIN_KEY }
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Error de API');
+    allPlacas = data.placas || [];
+    setConnectionStatus(true);
+    applyFilters();
+  } catch (e) {
+    setConnectionStatus(false);
+    renderTableError(e.message);
+  } finally {
+    btn.classList.remove('opacity-60', 'pointer-events-none');
+  }
+}
+
+async function loadFullData(placa) {
+  if (fullDataCache[placa]) return fullDataCache[placa];
+  const resp = await fetch(`${API_URL}/admin/placas/${encodeURIComponent(placa)}/datos`, {
+    headers: { 'X-Admin-Key': ADMIN_KEY }
+  });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  const data = await resp.json();
+  if (!data.ok) throw new Error(data.error || 'Error al cargar datos');
+  fullDataCache[placa] = data.datos;
+  return data.datos;
+}
+
+// ============================================================
+// FILTERS & SORT
+// ============================================================
+function applyFilters() {
+  const search     = (document.getElementById('filter-search').value || '').toLowerCase().trim();
+  const estado     = document.getElementById('filter-estado').value;
+  const docFilter  = document.getElementById('filter-doc').value;
+
+  let list = allPlacas.slice();
+
+  // Text search
+  if (search) {
+    list = list.filter(p => {
+      const haystack = [
+        p.placa, p.marca, p.modelo, p.anio, p.color, p.clase
+      ].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(search);
+    });
+  }
+
+  // Estado general filter
+  if (estado === 'vencidos') {
+    list = list.filter(p => hasVencido(p));
+  } else if (estado === 'proximos') {
+    list = list.filter(p => !hasVencido(p) && hasProximo(p));
+  } else if (estado === 'aldia') {
+    list = list.filter(p => !hasVencido(p) && !hasProximo(p));
+  }
+
+  // Doc filter
+  if (docFilter === 'soat_vencido') {
+    list = list.filter(p => dateStatus(p.soat_vence) === 'vencido');
+  } else if (docFilter === 'rtm_vencido') {
+    list = list.filter(p => dateStatus(p.rtm_vence) === 'vencido');
+  } else if (docFilter === 'simit_multas') {
+    list = list.filter(p => !p.simit_paz_salvo);
+  }
+
+  // Sort
+  if (sortCol) {
+    list.sort((a, b) => {
+      let av = a[sortCol] ?? '';
+      let bv = b[sortCol] ?? '';
+      if (typeof av === 'string') av = av.toLowerCase();
+      if (typeof bv === 'string') bv = bv.toLowerCase();
+      if (av < bv) return -1 * sortDir;
+      if (av > bv) return  1 * sortDir;
+      return 0;
+    });
+  }
+
+  filteredPlacas = list;
+
+  document.getElementById('filter-count').textContent =
+    `${list.length} placa${list.length !== 1 ? 's' : ''} encontrada${list.length !== 1 ? 's' : ''}`;
+
+  renderStats();
+  renderTable();
+}
+
+function sortBy(col) {
+  if (sortCol === col) {
+    sortDir = sortDir * -1;
+  } else {
+    sortCol = col;
+    sortDir = 1;
+  }
+  // Update header styles
+  document.querySelectorAll('th.sortable').forEach(th => {
+    th.classList.remove('sort-asc', 'sort-desc');
+  });
+  const ths = document.querySelectorAll('th.sortable');
+  const cols = ['placa','marca','estado_vehiculo','soat_vence','rtm_vence','rc_vence','simit_paz_salvo','tarjeta_op_vence','ultima_consulta'];
+  ths.forEach((th, i) => {
+    if (cols[i] === col) {
+      th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+    }
+  });
+  applyFilters();
+}
+
+// ============================================================
+// STATUS HELPERS
+// ============================================================
+function daysUntil(dateStr) {
+  if (!dateStr) return null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  // dateStr is YYYY-MM-DD
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return null;
+  const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  if (isNaN(d.getTime())) return null;
+  return Math.round((d - today) / 86400000);
+}
+
+function dateStatus(dateStr) {
+  const days = daysUntil(dateStr);
+  if (days === null) return 'sin_dato';
+  if (days < 0)  return 'vencido';
+  if (days <= 30) return 'proximo';
+  return 'vigente';
+}
+
+function dateBadge(dateStr) {
+  const status = dateStatus(dateStr);
+  const days   = daysUntil(dateStr);
+  const fmted  = fmtFecha(dateStr);
+  let label = '';
+  if (status === 'sin_dato') {
+    return '<span class="badge-pill badge-sin_dato">Sin datos</span>';
+  }
+  if (status === 'vencido') {
+    label = `Vencido hace ${Math.abs(days)}d`;
+  } else if (status === 'proximo') {
+    label = days === 0 ? 'Vence hoy' : `Vence en ${days}d`;
+  } else {
+    label = `Vence en ${days}d`;
+  }
+  return `<div>
+    <div class="text-xs text-gray-500 mb-0.5">${fmted}</div>
+    <span class="badge-pill badge-${status}">${label}</span>
+  </div>`;
+}
+
+function hasVencido(p) {
+  return ['soat_vence','rtm_vence','rc_vence','tarjeta_op_vence'].some(k => dateStatus(p[k]) === 'vencido');
+}
+
+function hasProximo(p) {
+  return ['soat_vence','rtm_vence','rc_vence','tarjeta_op_vence'].some(k => dateStatus(p[k]) === 'proximo');
+}
+
+// ============================================================
+// STATS
+// ============================================================
+function renderStats() {
+  const total     = allPlacas.length;
+  const vencidos  = allPlacas.filter(hasVencido).length;
+  const proximos  = allPlacas.filter(p => !hasVencido(p) && hasProximo(p)).length;
+  const sinmultas = allPlacas.filter(p => p.simit_paz_salvo).length;
+
+  document.getElementById('stat-total').textContent    = total.toLocaleString('es-CO');
+  document.getElementById('stat-vencidos').textContent = vencidos.toLocaleString('es-CO');
+  document.getElementById('stat-proximos').textContent = proximos.toLocaleString('es-CO');
+  document.getElementById('stat-sinmultas').textContent = sinmultas.toLocaleString('es-CO');
+}
+
+// ============================================================
+// TABLE RENDER
+// ============================================================
+function renderTable() {
+  const tbody = document.getElementById('placas-tbody');
+  if (!filteredPlacas.length) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="10" class="text-center py-16 text-gray-400">
+          <div class="mb-3"><i class="fa-solid fa-car-side text-5xl text-gray-200"></i></div>
+          <p class="font-semibold">No hay placas registradas.</p>
+          <p class="text-sm mt-1">Agrega una nueva consulta con el boton "Nueva Consulta".</p>
+        </td>
+      </tr>`;
+    return;
+  }
+  tbody.innerHTML = filteredPlacas.map(renderRow).join('');
+}
+
+function renderTableError(msg) {
+  document.getElementById('placas-tbody').innerHTML = `
+    <tr>
+      <td colspan="10" class="text-center py-16 text-red-400">
+        <i class="fa-solid fa-triangle-exclamation text-3xl mb-2"></i>
+        <p class="font-semibold">Error al cargar datos</p>
+        <p class="text-sm mt-1">${escHtml(msg)}</p>
+      </td>
+    </tr>`;
+}
+
+function renderRow(p) {
+  // Row border color
+  let rowClass = 'border-b border-gray-100 hover:bg-gray-50 transition';
+  if (hasVencido(p)) {
+    rowClass += ' row-vencido';
+  } else if (hasProximo(p)) {
+    rowClass += ' row-proximo';
+  }
+
+  // Vehicle info
+  const vehiculo = [p.marca, p.modelo, p.anio].filter(Boolean).join(' ') || '—';
+  const colorClase = [p.color, p.clase].filter(Boolean).join(' / ') || '';
+
+  // Estado vehiculo badge
+  const ev = (p.estado_vehiculo || '').toUpperCase();
+  const estadoBadge = ev === 'ACTIVO' || ev === 'ACTIVA'
+    ? '<span class="badge-pill badge-vigente">ACTIVO</span>'
+    : (ev ? `<span class="badge-pill badge-vencido">${escHtml(p.estado_vehiculo)}</span>` : '<span class="badge-pill badge-sin_dato">—</span>');
+
+  // SIMIT
+  const simitBadge = p.simit_paz_salvo
+    ? '<span class="badge-pill badge-vigente"><i class="fa-solid fa-shield-halved mr-1"></i>PAZ Y SALVO</span>'
+    : `<span class="badge-pill badge-vencido"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${fmtMoney(p.simit_total)}</span>`;
+
+  // Ultima consulta
+  const uc = fmtDatetime(p.ultima_consulta);
+
+  return `
+    <tr class="${rowClass}" data-placa="${escAttr(p.placa)}">
+      <td class="px-4 py-3">
+        <span class="font-mono font-bold text-brand tracking-wider">${escHtml(p.placa)}</span>
+        ${p.cedula_masked ? `<div class="text-xs text-gray-400 mt-0.5">CC: ${escHtml(p.cedula_masked)}</div>` : ''}
+      </td>
+      <td class="px-4 py-3">
+        <div class="font-semibold text-gray-800">${escHtml(vehiculo)}</div>
+        ${colorClase ? `<div class="text-xs text-gray-400 mt-0.5">${escHtml(colorClase)}</div>` : ''}
+      </td>
+      <td class="px-4 py-3">${estadoBadge}</td>
+      <td class="px-4 py-3">${dateBadge(p.soat_vence)}</td>
+      <td class="px-4 py-3">${dateBadge(p.rtm_vence)}</td>
+      <td class="px-4 py-3 col-hide-mobile">${dateBadge(p.rc_vence)}</td>
+      <td class="px-4 py-3">${simitBadge}</td>
+      <td class="px-4 py-3 col-hide-mobile">${dateBadge(p.tarjeta_op_vence)}</td>
+      <td class="px-4 py-3 text-xs text-gray-500">${uc}</td>
+      <td class="px-4 py-3">
+        <div class="flex items-center justify-center gap-1">
+          <button title="Ver detalles"
+            onclick="showAndLoadDetails('${escAttr(p.placa)}')"
+            class="p-2 rounded-lg text-brand hover:bg-blue-50 transition">
+            <i class="fa-solid fa-eye"></i>
+          </button>
+          <button title="Descargar PDF"
+            onclick="pdfFromTable('${escAttr(p.placa)}')"
+            class="p-2 rounded-lg text-red-500 hover:bg-red-50 transition">
+            <i class="fa-solid fa-file-pdf"></i>
+          </button>
+          <button title="Volver a consultar"
+            onclick="openAddModal('${escAttr(p.placa)}')"
+            class="p-2 rounded-lg text-gray-400 hover:bg-gray-100 transition">
+            <i class="fa-solid fa-rotate-right"></i>
+          </button>
+        </div>
+      </td>
+    </tr>`;
+}
+
+// ============================================================
+// DETAIL MODAL
+// ============================================================
+async function showAndLoadDetails(placa) {
+  currentDetailPlaca = placa;
+  currentDetailDatos = null;
+  document.getElementById('detail-title').textContent = placa;
+  document.getElementById('detail-body').innerHTML = `
+    <div class="text-center py-12">
+      <div class="spinner-lg mx-auto mb-3"></div>
+      <p class="text-gray-400">Cargando datos...</p>
+    </div>`;
+  document.getElementById('modal-detail').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  try {
+    const datos = await loadFullData(placa);
+    currentDetailDatos = datos;
+    renderDetailBody(placa, datos);
+  } catch (e) {
+    document.getElementById('detail-body').innerHTML = `
+      <div class="text-center py-12 text-red-400">
+        <i class="fa-solid fa-triangle-exclamation text-3xl mb-2"></i>
+        <p class="font-semibold">Error al cargar datos</p>
+        <p class="text-sm mt-1">${escHtml(e.message)}</p>
+      </div>`;
+  }
+}
+
+function closeDetailModal() {
+  document.getElementById('modal-detail').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+function renderDetailBody(placa, datos) {
+  const auth   = datos.auth || {};
+  const info   = auth.infoVehiculo || {};
+  const soat   = (datos.soat || []);
+  const tecRaw = datos.tecnomecanica;
+  const revs   = Array.isArray(tecRaw) ? tecRaw : ((tecRaw && tecRaw.revisiones) ? tecRaw.revisiones : []);
+  const rc     = datos.responsabilidad_civil || [];
+  const lims   = datos.limitaciones || [];
+  const to     = datos.tarjeta_operacion || {};
+  const simit  = datos.simit || {};
+
+  const soatLast = soat.length ? soat[soat.length - 1] : null;
+  const revLast  = revs.length ? revs[revs.length - 1] : null;
+  const rcActiva = rc.find(x => (x.estado || '').toUpperCase() === 'ACTIVA') || rc[rc.length - 1] || null;
+
+  let html = '';
+
+  // INFO GENERAL
+  html += `<div class="detail-section">
+    <h4>Informacion del Vehiculo</h4>
+    <div class="detail-grid">
+      ${detItem('Placa',          placa)}
+      ${detItem('Marca',          info.marca)}
+      ${detItem('Linea/Modelo',   info.linea)}
+      ${detItem('Ano',            info.modelo)}
+      ${detItem('Color',          info.color)}
+      ${detItem('Clase',          info.clase)}
+      ${detItem('Tipo Servicio',  info.tipoServicio)}
+      ${detItem('N Motor',        info.numeroMotor)}
+      ${detItem('N Chasis',       info.numeroChasis)}
+      ${detItem('Estado',         info.estadoAutomotor)}
+      ${detItem('Propietario',    info.nombrePropietario)}
+      ${detItem('Municipio',      info.municipioRegistro)}
+    </div>
+  </div>`;
+
+  // DOCUMENTOS
+  html += `<div class="detail-section">
+    <h4>Estado de Documentos</h4>
+    <div class="space-y-1">`;
+
+  // SOAT
+  if (soatLast) {
+    html += docRow('SOAT', soatLast.numeroPoliza,
+      fmtFecha(soatLast.fechaInicioSoat), fmtFecha(soatLast.fechaVencimSoat),
+      soatLast.estado, soatLast.razonSocialAsegur);
+  } else {
+    html += docRow('SOAT', '—', '—', '—', 'SIN DATOS');
+  }
+
+  // RTM
+  if (revLast) {
+    html += docRow('RTM / Tecnomecanica', revLast.numeroCertificado,
+      fmtFecha(revLast.fechaExpedicion), fmtFecha(revLast.fechaVigencia),
+      revLast.estado, revLast.nombreCda);
+  } else {
+    html += docRow('RTM / Tecnomecanica', '—', '—', '—', 'SIN DATOS');
+  }
+
+  // RC
+  if (rcActiva) {
+    html += docRow('Resp. Civil', rcActiva.numeroCertificado,
+      fmtFecha(rcActiva.fechaInicioVigencia), fmtFecha(rcActiva.fechaFinVigencia),
+      rcActiva.estado, rcActiva.compania);
+  } else {
+    html += docRow('Resp. Civil', '—', '—', '—', 'SIN DATOS');
+  }
+
+  // Tarjeta Op
+  if (to && to.numeroTarjeta) {
+    html += docRow('Tarjeta Operacion', to.numeroTarjeta,
+      fmtFecha(to.fechaInicio), fmtFecha(to.fechaFin),
+      to.estado, to.empresa);
+  } else {
+    html += docRow('Tarjeta Operacion', '—', '—', '—', 'SIN DATOS');
+  }
+
+  html += `</div></div>`;
+
+  // LIMITACIONES
+  if (lims.length) {
+    html += `<div class="detail-section">
+      <h4>Limitaciones (${lims.length})</h4>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead><tr class="bg-gray-50">
+            <th class="px-3 py-2 text-left font-bold text-gray-500">Tipo</th>
+            <th class="px-3 py-2 text-left font-bold text-gray-500">Entidad</th>
+            <th class="px-3 py-2 text-left font-bold text-gray-500">Desde</th>
+            <th class="px-3 py-2 text-left font-bold text-gray-500">Estado</th>
+          </tr></thead>
+          <tbody>
+            ${lims.map(l => `<tr class="border-b border-gray-100">
+              <td class="px-3 py-2 text-gray-700">${escHtml(l.tipo || l.tipoLimitacion || '—')}</td>
+              <td class="px-3 py-2 text-gray-500">${escHtml(l.entidad || l.descripcionEntidad || '—')}</td>
+              <td class="px-3 py-2 text-gray-500">${fmtFecha(l.fechaInicio || l.fechaLimitacion)}</td>
+              <td class="px-3 py-2">${escHtml(l.estado || '—')}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+  }
+
+  // SIMIT
+  html += `<div class="detail-section">
+    <h4>SIMIT — Multas y Comparendos</h4>`;
+
+  if (simit.pazSalvo || !simit.totalGeneral) {
+    html += `<div class="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+      <i class="fa-solid fa-shield-halved text-green-600 text-2xl"></i>
+      <div>
+        <p class="font-bold text-green-700">PAZ Y SALVO</p>
+        <p class="text-green-600 text-sm">Sin multas ni comparendos pendientes</p>
+      </div>
+    </div>`;
+  } else {
+    const comparendos = simit.comparendos || simit.infracciones || [];
+    if (comparendos.length) {
+      html += `<div class="overflow-x-auto mb-3">
+        <table class="w-full text-xs">
+          <thead><tr class="bg-red-50">
+            <th class="px-3 py-2 text-left font-bold text-gray-500">N Resolucion</th>
+            <th class="px-3 py-2 text-left font-bold text-gray-500">Infraccion</th>
+            <th class="px-3 py-2 text-left font-bold text-gray-500">Fecha</th>
+            <th class="px-3 py-2 text-left font-bold text-gray-500">Organismo</th>
+            <th class="px-3 py-2 text-left font-bold text-gray-500">Estado</th>
+            <th class="px-3 py-2 text-right font-bold text-gray-500">Valor</th>
+          </tr></thead>
+          <tbody>
+            ${comparendos.map(c => `<tr class="border-b border-gray-100">
+              <td class="px-3 py-2 font-mono text-gray-600">${escHtml(c.numeroResolucion || c.resolucion || '—')}</td>
+              <td class="px-3 py-2 text-gray-700">${escHtml(c.infraccion || c.descripcion || '—')}</td>
+              <td class="px-3 py-2 text-gray-500">${fmtFecha(c.fecha || c.fechaInfraccion)}</td>
+              <td class="px-3 py-2 text-gray-500">${escHtml(c.organismo || c.organismoTransito || '—')}</td>
+              <td class="px-3 py-2">${escHtml(c.estado || '—')}</td>
+              <td class="px-3 py-2 text-right font-semibold text-red-600">${fmtMoney(c.valor || c.valorTotal || 0)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+    }
+    html += `<div class="flex justify-end">
+      <div class="bg-red-50 border border-red-200 rounded-xl px-4 py-2 inline-flex items-center gap-2">
+        <span class="text-red-600 font-bold text-sm">Total SIMIT:</span>
+        <span class="text-red-700 font-black">${fmtMoney(simit.totalGeneral || 0)}</span>
+      </div>
+    </div>`;
+  }
+  html += `</div>`;
+
+  document.getElementById('detail-body').innerHTML = html;
+}
+
+function detItem(label, value) {
+  return `<div class="detail-item">
+    <label>${escHtml(label)}</label>
+    <span>${escHtml(value || '—')}</span>
+  </div>`;
+}
+
+function docRow(tipo, cert, desde, hasta, estado, extra) {
+  const st = (estado || '').toUpperCase();
+  let statBadge = '';
+  if (st === 'VIGENTE' || st === 'ACTIVA' || st === 'ACTIVO') {
+    statBadge = '<span class="badge-pill badge-vigente">VIGENTE</span>';
+  } else if (st === 'VENCIDO' || st === 'VENCIDA' || st === 'INACTIVO') {
+    statBadge = '<span class="badge-pill badge-vencido">VENCIDO</span>';
+  } else if (st && st !== 'SIN DATOS') {
+    statBadge = `<span class="badge-pill badge-sin_dato">${escHtml(estado)}</span>`;
+  } else {
+    statBadge = '<span class="badge-pill badge-sin_dato">Sin datos</span>';
+  }
+  return `<div class="doc-row">
+    <div>
+      <div class="font-semibold text-gray-700 text-sm">${escHtml(tipo)}</div>
+      <div class="text-xs text-gray-400">${escHtml(cert || '—')} ${extra ? '· ' + escHtml(extra) : ''}</div>
+    </div>
+    <div class="text-xs text-gray-500">
+      ${desde && desde !== '—' ? `<span>Desde: ${desde}</span><br>` : ''}
+      ${hasta && hasta !== '—' ? `<span class="font-medium">Hasta: ${hasta}</span>` : ''}
+    </div>
+    <div>${statBadge}</div>
+  </div>`;
+}
+
+// ============================================================
+// ADD PLATE MODAL
+// ============================================================
+function openAddModal(prefilledPlaca) {
+  document.getElementById('add-form').classList.remove('hidden');
+  document.getElementById('add-loading').classList.add('hidden');
+  document.getElementById('add-success').classList.add('hidden');
+  document.getElementById('add-error').classList.add('hidden');
+  document.getElementById('add-placa').value  = prefilledPlaca || '';
+  document.getElementById('add-cedula').value = '';
+  document.getElementById('modal-add').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  setTimeout(() => {
+    const el = prefilledPlaca
+      ? document.getElementById('add-cedula')
+      : document.getElementById('add-placa');
+    el.focus();
+  }, 50);
+}
+
+function closeAddModal() {
+  document.getElementById('modal-add').classList.add('hidden');
+  document.body.style.overflow = '';
+}
+
+async function submitAddPlate() {
+  const placa  = document.getElementById('add-placa').value.trim().toUpperCase();
+  const cedula = document.getElementById('add-cedula').value.trim();
+  const errEl  = document.getElementById('add-error');
+  const errMsg = document.getElementById('add-error-msg');
+
+  if (!placa || placa.length < 5) {
+    errMsg.textContent = 'Ingresa una placa valida (minimo 5 caracteres).';
+    errEl.classList.remove('hidden'); return;
+  }
+  if (!cedula || cedula.length < 5) {
+    errMsg.textContent = 'Ingresa un numero de cedula valido.';
+    errEl.classList.remove('hidden'); return;
+  }
+  errEl.classList.add('hidden');
+
+  document.getElementById('add-form').classList.add('hidden');
+  document.getElementById('add-loading').classList.remove('hidden');
+
+  try {
+    await addPlate(placa, cedula);
+    document.getElementById('add-loading').classList.add('hidden');
+    document.getElementById('add-success-msg').textContent = `Placa ${placa} agregada exitosamente`;
+    document.getElementById('add-success').classList.remove('hidden');
+    // Invalidate cache for this plate
+    delete fullDataCache[placa];
+    await loadPlacas();
+    setTimeout(() => closeAddModal(), 2000);
+  } catch (e) {
+    document.getElementById('add-loading').classList.add('hidden');
+    document.getElementById('add-form').classList.remove('hidden');
+    errMsg.textContent = e.message || 'Error al consultar. Intenta de nuevo.';
+    errEl.classList.remove('hidden');
+  }
+}
+
+async function addPlate(placa, cedula) {
+  const resp = await fetch(`${API_URL}/consultar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ placa, cedula })
+  });
+  const data = await resp.json();
+  if (!data.ok) throw new Error(data.error || `Error HTTP ${resp.status}`);
+  return data;
+}
+
+// Close modals on overlay click
+document.getElementById('modal-add').addEventListener('click', function(e) {
+  if (e.target === this) closeAddModal();
+});
+document.getElementById('modal-detail').addEventListener('click', function(e) {
+  if (e.target === this) closeDetailModal();
+});
+
+// ============================================================
+// PDF GENERATION
+// ============================================================
+function generatePDFFromModal() {
+  if (currentDetailPlaca && currentDetailDatos) {
+    generatePDF(currentDetailPlaca, currentDetailDatos);
+  }
+}
+
+async function pdfFromTable(placa) {
+  try {
+    const datos = await loadFullData(placa);
+    generatePDF(placa, datos);
+  } catch (e) {
+    alert('Error al cargar datos para PDF: ' + e.message);
+  }
+}
+
+function generatePDF(placa, datos) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  const pageW = doc.internal.pageSize.getWidth();
+  const now   = new Date();
+  const nowStr = fmtFecha(now.toISOString().substring(0, 10)) + ' ' +
+    now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+
+  // Header bar
+  doc.setFillColor(30, 58, 138);
+  doc.rect(0, 0, pageW, 20, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Speedy', 12, 13);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.text('CERTIFICADO DE CONSULTA VEHICULAR', pageW / 2, 13, { align: 'center' });
+
+  // Subtitle
+  doc.setFillColor(241, 245, 249);
+  doc.rect(0, 20, pageW, 10, 'F');
+  doc.setTextColor(100, 116, 139);
+  doc.setFontSize(8);
+  doc.text(`Reporte generado: ${nowStr}  |  Datos RUNT & SIMIT Colombia`, pageW / 2, 26.5, { align: 'center' });
+
+  let y = 36;
+  doc.setTextColor(0, 0, 0);
+
+  const auth  = datos.auth || {};
+  const info  = auth.infoVehiculo || {};
+  const soat  = datos.soat || [];
+  const tecRawPdf = datos.tecnomecanica;
+  const revs  = Array.isArray(tecRawPdf) ? tecRawPdf : ((tecRawPdf && tecRawPdf.revisiones) ? tecRawPdf.revisiones : []);
+  const rc    = datos.responsabilidad_civil || [];
+  const to    = datos.tarjeta_operacion || {};
+  const simit = datos.simit || {};
+
+  const soatLast = soat.length ? soat[soat.length - 1] : null;
+  const revLast  = revs.length ? revs[revs.length - 1] : null;
+  const rcActiva = rc.find(x => (x.estado || '').toUpperCase() === 'ACTIVA') || rc[rc.length - 1] || null;
+
+  // Section helper
+  function sectionTitle(title) {
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 58, 138);
+    doc.text(title.toUpperCase(), 12, y);
+    doc.setDrawColor(30, 58, 138);
+    doc.setLineWidth(0.4);
+    doc.line(12, y + 1.5, pageW - 12, y + 1.5);
+    doc.setTextColor(0, 0, 0);
+    y += 5;
+  }
+
+  // INFORMACION DEL VEHICULO
+  sectionTitle('Informacion del Vehiculo');
+  doc.autoTable({
+    startY: y,
+    margin: { left: 12, right: 12 },
+    theme: 'striped',
+    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    head: [['Placa', 'Marca', 'Linea/Modelo', 'Ano', 'Color', 'Clase', 'Estado']],
+    body: [[
+      placa,
+      info.marca || '—',
+      info.linea || '—',
+      info.modelo || '—',
+      info.color || '—',
+      info.clase || '—',
+      info.estadoAutomotor || '—',
+    ]],
+  });
+  y = doc.lastAutoTable.finalY + 4;
+
+  doc.autoTable({
+    startY: y,
+    margin: { left: 12, right: 12 },
+    theme: 'striped',
+    headStyles: { fillColor: [51, 65, 85], textColor: 255, fontSize: 8 },
+    bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    head: [['Tipo Servicio', 'N Motor', 'N Chasis', 'Propietario', 'Municipio Registro']],
+    body: [[
+      info.tipoServicio || '—',
+      info.numeroMotor || '—',
+      info.numeroChasis || '—',
+      info.nombrePropietario || '—',
+      info.municipioRegistro || '—',
+    ]],
+  });
+  y = doc.lastAutoTable.finalY + 6;
+
+  // ESTADO DE DOCUMENTOS
+  sectionTitle('Estado de Documentos');
+  const docRows = [];
+  if (soatLast) {
+    docRows.push(['SOAT', soatLast.numeroPoliza || '—',
+      fmtFecha(soatLast.fechaInicioSoat), fmtFecha(soatLast.fechaVencimSoat),
+      soatLast.razonSocialAsegur || '—', soatLast.estado || '—']);
+  } else {
+    docRows.push(['SOAT', '—', '—', '—', '—', 'SIN DATOS']);
+  }
+  if (revLast) {
+    docRows.push(['RTM / Tecnomecanica', revLast.numeroCertificado || '—',
+      fmtFecha(revLast.fechaExpedicion), fmtFecha(revLast.fechaVigencia),
+      revLast.nombreCda || '—', revLast.estado || '—']);
+  } else {
+    docRows.push(['RTM / Tecnomecanica', '—', '—', '—', '—', 'SIN DATOS']);
+  }
+  if (rcActiva) {
+    docRows.push(['Resp. Civil', rcActiva.numeroCertificado || '—',
+      fmtFecha(rcActiva.fechaInicioVigencia), fmtFecha(rcActiva.fechaFinVigencia),
+      rcActiva.compania || '—', rcActiva.estado || '—']);
+  } else {
+    docRows.push(['Resp. Civil', '—', '—', '—', '—', 'SIN DATOS']);
+  }
+  if (to && to.numeroTarjeta) {
+    docRows.push(['Tarjeta Operacion', to.numeroTarjeta || '—',
+      fmtFecha(to.fechaInicio), fmtFecha(to.fechaFin),
+      to.empresa || '—', to.estado || '—']);
+  } else {
+    docRows.push(['Tarjeta Operacion', '—', '—', '—', '—', 'SIN DATOS']);
+  }
+
+  doc.autoTable({
+    startY: y,
+    margin: { left: 12, right: 12 },
+    theme: 'striped',
+    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: { 5: { fontStyle: 'bold' } },
+    head: [['Documento', 'N / Certificado', 'Vigencia desde', 'Vigencia hasta', 'Entidad', 'Estado']],
+    body: docRows,
+    didDrawCell: (hookData) => {
+      if (hookData.section === 'body' && hookData.column.index === 5) {
+        const val = (hookData.cell.raw || '').toString().toUpperCase();
+        if (val === 'VIGENTE' || val === 'ACTIVO' || val === 'ACTIVA') {
+          hookData.cell.styles.textColor = [21, 128, 61];
+        } else if (val === 'VENCIDO' || val === 'VENCIDA' || val === 'INACTIVO') {
+          hookData.cell.styles.textColor = [220, 38, 38];
+        }
+      }
+    }
+  });
+  y = doc.lastAutoTable.finalY + 6;
+
+  // SIMIT
+  sectionTitle('SIMIT — Multas y Comparendos');
+  if (simit.pazSalvo || !simit.totalGeneral) {
+    doc.setFillColor(220, 252, 231);
+    doc.setDrawColor(134, 239, 172);
+    doc.roundedRect(12, y, pageW - 24, 10, 2, 2, 'FD');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(21, 128, 61);
+    doc.text('PAZ Y SALVO — Sin multas ni comparendos pendientes', pageW / 2, y + 6.5, { align: 'center' });
+    doc.setTextColor(0, 0, 0);
+    y += 14;
+  } else {
+    const comparendos = simit.comparendos || simit.infracciones || [];
+    if (comparendos.length) {
+      const cRows = comparendos.map(c => [
+        c.numeroResolucion || c.resolucion || '—',
+        c.infraccion || c.descripcion || '—',
+        fmtFecha(c.fecha || c.fechaInfraccion),
+        c.organismo || c.organismoTransito || '—',
+        c.estado || '—',
+        fmtMoney(c.valor || c.valorTotal || 0),
+      ]);
+      doc.autoTable({
+        startY: y,
+        margin: { left: 12, right: 12 },
+        theme: 'striped',
+        headStyles: { fillColor: [220, 38, 38], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+        bodyStyles: { fontSize: 7.5, textColor: [30, 41, 59] },
+        alternateRowStyles: { fillColor: [255, 241, 242] },
+        head: [['N Resolucion', 'Infraccion', 'Fecha', 'Organismo', 'Estado', 'Valor']],
+        body: cRows,
+        foot: [['', '', '', '', 'TOTAL', fmtMoney(simit.totalGeneral || 0)]],
+        footStyles: { fillColor: [30, 41, 59], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+      });
+      y = doc.lastAutoTable.finalY + 4;
+    } else {
+      doc.setFontSize(8);
+      doc.setTextColor(100);
+      doc.text(`Total SIMIT: ${fmtMoney(simit.totalGeneral || 0)}`, 12, y + 5);
+      y += 10;
+    }
+  }
+
+  // Footer
+  const pageCount = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    const footY = doc.internal.pageSize.getHeight() - 8;
+    doc.setFillColor(241, 245, 249);
+    doc.rect(0, footY - 4, pageW, 12, 'F');
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(
+      `Documento generado por Speedy · Datos oficiales RUNT (runt.gov.co) y SIMIT (fcm.org.co) · Consulta: ${nowStr}`,
+      pageW / 2, footY + 1, { align: 'center' }
+    );
+    doc.text(`Pagina ${i} de ${pageCount}`, pageW - 12, footY + 1, { align: 'right' });
+  }
+
+  const dateTag = now.toISOString().substring(0, 10);
+  doc.save(`Speedy_Certificado_${placa}_${dateTag}.pdf`);
+}
+
+// ============================================================
+// EXCEL EXPORT
+// ============================================================
+function exportExcel() {
+  if (!filteredPlacas.length) {
+    alert('No hay placas para exportar.');
+    return;
+  }
+
+  const wb = XLSX.utils.book_new();
+
+  // Sheet 1: Resumen
+  const headers = [
+    'Placa', 'Marca', 'Modelo', 'Ano', 'Color', 'Estado Vehiculo',
+    'SOAT Vence', 'SOAT Estado', 'SOAT Aseguradora',
+    'RTM Vence', 'RTM Estado', 'RTM CDA',
+    'RC Vence', 'RC Estado',
+    'T.Op Vence', 'T.Op Estado',
+    'SIMIT', 'Monto SIMIT',
+    'Ultima Consulta'
+  ];
+
+  const rows = filteredPlacas.map(p => [
+    p.placa || '',
+    p.marca || '',
+    p.modelo || '',
+    p.anio || '',
+    p.color || '',
+    p.estado_vehiculo || '',
+    fmtFecha(p.soat_vence),
+    p.soat_estado || '',
+    p.soat_aseguradora || '',
+    fmtFecha(p.rtm_vence),
+    p.rtm_estado || '',
+    p.rtm_cda || '',
+    fmtFecha(p.rc_vence),
+    p.rc_estado || '',
+    fmtFecha(p.tarjeta_op_vence),
+    p.tarjeta_op_estado || '',
+    p.simit_paz_salvo ? 'PAZ Y SALVO' : fmtMoney(p.simit_total || 0),
+    p.simit_total || 0,
+    p.ultima_consulta || '',
+  ]);
+
+  const wsData = [headers, ...rows];
+  const ws1 = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Bold header row
+  const headerRange = XLSX.utils.decode_range(ws1['!ref']);
+  for (let C = headerRange.s.c; C <= headerRange.e.c; C++) {
+    const cell = ws1[XLSX.utils.encode_cell({ r: 0, c: C })];
+    if (cell) cell.s = { font: { bold: true }, fill: { fgColor: { rgb: '1E3A8A' } }, font: { color: { rgb: 'FFFFFF' }, bold: true } };
+  }
+
+  // Column widths
+  ws1['!cols'] = [
+    { wch: 10 }, { wch: 14 }, { wch: 14 }, { wch: 6 }, { wch: 12 }, { wch: 12 },
+    { wch: 12 }, { wch: 10 }, { wch: 22 },
+    { wch: 12 }, { wch: 10 }, { wch: 20 },
+    { wch: 12 }, { wch: 10 },
+    { wch: 12 }, { wch: 10 },
+    { wch: 14 }, { wch: 14 },
+    { wch: 20 },
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws1, 'Resumen');
+
+  // Sheet 2: Leyenda
+  const leyenda = [
+    ['COLOR / ESTADO', 'SIGNIFICADO'],
+    ['Vencido', 'El documento ha superado su fecha de vencimiento'],
+    ['Proximo a vencer', 'El documento vence dentro de los proximos 30 dias'],
+    ['Vigente', 'El documento esta al dia (vence en mas de 30 dias)'],
+    ['Sin datos', 'No se encontro informacion para este documento'],
+    ['PAZ Y SALVO', 'El vehiculo no tiene multas ni comparendos pendientes en SIMIT'],
+    ['Monto SIMIT', 'Total de multas y comparendos pendientes en pesos colombianos'],
+    ['', ''],
+    ['NOTA', 'Los datos son consultados en tiempo real desde RUNT (runt.gov.co) y SIMIT (fcm.org.co).'],
+    ['', 'Este reporte es generado por Speedy y no reemplaza los documentos oficiales.'],
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(leyenda);
+  ws2['!cols'] = [{ wch: 25 }, { wch: 65 }];
+  XLSX.utils.book_append_sheet(wb, ws2, 'Leyenda');
+
+  const dateTag = new Date().toISOString().substring(0, 10);
+  XLSX.writeFile(wb, `Speedy_Placas_${dateTag}.xlsx`);
+}
+
+// ============================================================
+// UTILITY FUNCTIONS
+// ============================================================
+function fmtFecha(str) {
+  if (!str) return '—';
+  try {
+    const s = String(str);
+    // Expected format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS
+    const date = s.substring(0, 10);
+    const parts = date.split('-');
+    if (parts.length !== 3) return str;
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  } catch { return str; }
+}
+
+function fmtMoney(n) {
+  if (!n && n !== 0) return '—';
+  const num = parseFloat(n);
+  if (isNaN(num)) return '—';
+  if (num === 0) return '$0';
+  return '$' + Math.round(num).toLocaleString('es-CO');
+}
+
+function fmtDatetime(str) {
+  if (!str) return '—';
+  try {
+    const d = new Date(str.replace(' ', 'T') + (str.includes('+') ? '' : 'Z'));
+    return d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+      ' ' + d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  } catch { return str; }
+}
+
+function escHtml(str) {
+  if (!str && str !== 0) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function escAttr(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '&quot;');
+}
+
+// Keyboard: close modals on Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (!document.getElementById('modal-detail').classList.contains('hidden')) closeDetailModal();
+    else if (!document.getElementById('modal-add').classList.contains('hidden')) closeAddModal();
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Speedy — Consulta Vehicular Colombia</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#1E3A8A', light: '#2563EB', dark: '#1e2f6b' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Segoe UI', system-ui, sans-serif; }
+    .spinner { border: 3px solid #e5e7eb; border-top-color: #1E3A8A; border-radius: 50%; width: 2.5rem; height: 2.5rem; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+    .accordion-content.open { max-height: 2000px; }
+    .accordion-chevron { transition: transform 0.3s; }
+    .accordion-chevron.open { transform: rotate(180deg); }
+    .fade-in { animation: fadeIn 0.4s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    input[type="text"] { text-transform: uppercase; }
+    #cedula-input { text-transform: none; }
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white; }
+      #results { display: block !important; }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<!-- ===== HEADER ===== -->
+<header class="bg-brand shadow-lg no-print">
+  <div class="max-w-5xl mx-auto px-4 py-4 flex items-center gap-3">
+    <div class="bg-white/10 rounded-xl p-2">
+      <i class="fa-solid fa-car text-white text-2xl"></i>
+    </div>
+    <div>
+      <h1 class="text-white text-2xl font-bold tracking-tight">Speedy</h1>
+      <p class="text-blue-200 text-xs">Consulta Vehicular — RUNT & SIMIT Colombia</p>
+    </div>
+    <div class="ml-auto text-right hidden sm:block">
+      <p class="text-blue-200 text-xs">Servicio oficial</p>
+      <p class="text-white text-xs font-semibold">🇨🇴 Colombia</p>
+    </div>
+  </div>
+</header>
+
+<!-- ===== SEARCH FORM ===== -->
+<main class="max-w-5xl mx-auto px-4 py-8">
+  <div class="bg-white rounded-2xl shadow-md p-6 mb-6 no-print">
+    <h2 class="text-brand font-bold text-lg mb-4 flex items-center gap-2">
+      <i class="fa-solid fa-magnifying-glass"></i> Consulta tu Vehículo
+    </h2>
+    <div class="flex flex-col sm:flex-row gap-3">
+      <div class="flex-1">
+        <label class="block text-xs text-gray-500 mb-1 font-semibold uppercase tracking-wide">Placa</label>
+        <input id="placa-input" type="text" maxlength="7" placeholder="ABC123"
+          class="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-lg font-bold tracking-widest focus:border-brand focus:outline-none transition uppercase"
+          oninput="this.value=this.value.toUpperCase()" />
+      </div>
+      <div class="flex-1">
+        <label class="block text-xs text-gray-500 mb-1 font-semibold uppercase tracking-wide">Cédula del Propietario</label>
+        <input id="cedula-input" type="text" placeholder="1234567890"
+          style="text-transform:none"
+          class="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-lg focus:border-brand focus:outline-none transition" />
+      </div>
+      <div class="flex items-end">
+        <button onclick="consultar()"
+          class="bg-brand hover:bg-brand-light text-white font-bold px-8 py-3 rounded-xl transition flex items-center gap-2 shadow w-full sm:w-auto justify-center">
+          <i class="fa-solid fa-search"></i> Consultar
+        </button>
+      </div>
+    </div>
+    <p class="text-gray-400 text-xs mt-3">
+      <i class="fa-solid fa-shield-halved mr-1"></i>
+      Información oficial RUNT y SIMIT. Solo para fines informativos.
+    </p>
+  </div>
+
+  <!-- ===== LOADING STATE ===== -->
+  <div id="loading" class="hidden flex-col items-center justify-center py-16 bg-white rounded-2xl shadow-md mb-6">
+    <div class="spinner mb-5"></div>
+    <p id="loading-msg" class="text-brand font-semibold text-lg">Iniciando consulta...</p>
+    <p class="text-gray-400 text-sm mt-1">Por favor espera, esto puede tomar unos segundos</p>
+    <div class="flex gap-2 mt-6">
+      <div id="step1" class="flex items-center gap-1 text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-400">
+        <i class="fa-solid fa-robot"></i> Captcha
+      </div>
+      <div id="step2" class="flex items-center gap-1 text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-400">
+        <i class="fa-solid fa-car"></i> RUNT
+      </div>
+      <div id="step3" class="flex items-center gap-1 text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-400">
+        <i class="fa-solid fa-gavel"></i> SIMIT
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ERROR STATE ===== -->
+  <div id="error-box" class="hidden bg-red-50 border-2 border-red-200 rounded-2xl p-6 mb-6">
+    <div class="flex items-start gap-3">
+      <i class="fa-solid fa-circle-exclamation text-red-500 text-2xl mt-0.5"></i>
+      <div class="flex-1">
+        <h3 class="text-red-700 font-bold text-lg">Error en la consulta</h3>
+        <p id="error-msg" class="text-red-600 mt-1"></p>
+      </div>
+      <button onclick="resetForm()" class="text-red-400 hover:text-red-600 transition no-print">
+        <i class="fa-solid fa-xmark text-xl"></i>
+      </button>
+    </div>
+    <button onclick="consultar()" class="mt-4 bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg text-sm font-semibold transition no-print">
+      <i class="fa-solid fa-rotate-right mr-1"></i> Reintentar
+    </button>
+  </div>
+
+  <!-- ===== RESULTS ===== -->
+  <div id="results" class="hidden fade-in space-y-5">
+
+    <!-- Action Buttons -->
+    <div class="flex gap-2 justify-end no-print">
+      <button onclick="window.print()" class="bg-white border border-gray-200 text-gray-600 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 shadow-sm">
+        <i class="fa-solid fa-print"></i> Imprimir
+      </button>
+      <button onclick="copiarWhatsApp()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2 shadow-sm">
+        <i class="fa-brands fa-whatsapp"></i> Copiar para WhatsApp
+      </button>
+    </div>
+
+    <!-- 1. Vehicle Header Card -->
+    <div id="card-vehiculo" class="bg-white rounded-2xl shadow-md p-6"></div>
+
+    <!-- 2. Status Row -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div id="card-soat-status" class="bg-white rounded-2xl shadow-md p-5"></div>
+      <div id="card-rtm-status" class="bg-white rounded-2xl shadow-md p-5"></div>
+      <div id="card-simit-status" class="bg-white rounded-2xl shadow-md p-5"></div>
+    </div>
+
+    <!-- 3. Main Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div id="card-soat" class="bg-white rounded-2xl shadow-md p-5"></div>
+      <div id="card-rtm" class="bg-white rounded-2xl shadow-md p-5"></div>
+      <div id="card-rc" class="bg-white rounded-2xl shadow-md p-5"></div>
+      <div id="card-tarjeta-op" class="bg-white rounded-2xl shadow-md p-5"></div>
+    </div>
+
+    <!-- 4. Limitaciones -->
+    <div id="card-limitaciones" class="bg-white rounded-2xl shadow-md p-5"></div>
+
+    <!-- 5. SIMIT Multas -->
+    <div id="card-simit" class="bg-white rounded-2xl shadow-md p-5"></div>
+
+    <!-- 6. Accordion Sections -->
+    <div id="card-accordions" class="bg-white rounded-2xl shadow-md overflow-hidden"></div>
+
+  </div>
+
+  <!-- Print header (only visible on print) -->
+  <div class="hidden print:block mb-6 border-b pb-4">
+    <h1 class="text-2xl font-bold text-brand">Speedy — Reporte Vehicular</h1>
+    <p id="print-placa" class="text-gray-600"></p>
+    <p class="text-gray-400 text-sm" id="print-fecha"></p>
+  </div>
+</main>
+
+<footer class="text-center text-gray-400 text-xs py-6 no-print">
+  Speedy &copy; 2026 — Datos tomados de RUNT y SIMIT Colombia
+</footer>
+
+<script>
+// ============================================================
+// CONFIGURATION
+// ============================================================
+const API_URL = 'http://localhost:8080';
+
+// ============================================================
+// STATE
+// ============================================================
+let currentData = null;
+let currentMensaje = '';
+
+// ============================================================
+// UTILS
+// ============================================================
+function fmtFecha(str) {
+  if (!str) return '—';
+  // Handles: YYYY-MM-DD, DD/MM/YYYY, YYYY/MM/DD, etc.
+  let d;
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const parts = str.split('T')[0].split('-');
+    d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+  } else if (/^\d{2}\/\d{2}\/\d{4}/.test(str)) {
+    return str.slice(0, 10);
+  } else {
+    d = new Date(str);
+  }
+  if (isNaN(d)) return str;
+  return d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function fmtMoney(n) {
+  if (n == null || n === '') return '—';
+  const num = typeof n === 'string' ? parseFloat(n.replace(/[^0-9.-]/g, '')) : Number(n);
+  if (isNaN(num)) return n;
+  return '$' + num.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function isVigente(fechaStr) {
+  if (!fechaStr) return false;
+  let d;
+  if (/^\d{4}-\d{2}-\d{2}/.test(fechaStr)) {
+    const p = fechaStr.split('T')[0].split('-');
+    d = new Date(+p[0], +p[1] - 1, +p[2]);
+  } else if (/^\d{2}\/\d{2}\/\d{4}/.test(fechaStr)) {
+    const p = fechaStr.split('/');
+    d = new Date(+p[2], +p[1] - 1, +p[0]);
+  } else {
+    d = new Date(fechaStr);
+  }
+  return !isNaN(d) && d >= new Date();
+}
+
+function statusBadge(texto, vigente) {
+  const base = 'inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide';
+  if (vigente === true) return `<span class="${base} bg-green-100 text-green-700"><i class="fa-solid fa-circle-check"></i> ${texto}</span>`;
+  if (vigente === false) return `<span class="${base} bg-red-100 text-red-700"><i class="fa-solid fa-circle-xmark"></i> ${texto}</span>`;
+  return `<span class="${base} bg-gray-100 text-gray-600">${texto}</span>`;
+}
+
+function cardTitle(icon, text) {
+  return `<h3 class="text-brand font-bold text-sm uppercase tracking-wide mb-3 flex items-center gap-2">
+    <i class="fa-solid ${icon} text-brand-light"></i> ${text}
+  </h3>`;
+}
+
+function infoRow(label, value) {
+  return `<div class="flex justify-between py-1.5 border-b border-gray-50 last:border-0 gap-2">
+    <span class="text-gray-500 text-sm shrink-0">${label}</span>
+    <span class="text-gray-800 text-sm font-medium text-right">${value || '—'}</span>
+  </div>`;
+}
+
+function emptyState(msg) {
+  return `<p class="text-gray-400 text-sm italic text-center py-2"><i class="fa-regular fa-circle-check mr-1"></i>${msg}</p>`;
+}
+
+// ============================================================
+// LOADING STATES
+// ============================================================
+const STEPS = [
+  { id: 'step1', msg: 'Resolviendo captcha...' },
+  { id: 'step2', msg: 'Consultando RUNT...' },
+  { id: 'step3', msg: 'Verificando SIMIT...' },
+];
+let stepInterval = null;
+let stepIdx = 0;
+
+function startLoading() {
+  document.getElementById('loading').classList.remove('hidden');
+  document.getElementById('loading').classList.add('flex');
+  document.getElementById('results').classList.add('hidden');
+  document.getElementById('error-box').classList.add('hidden');
+  stepIdx = 0;
+  STEPS.forEach(s => {
+    const el = document.getElementById(s.id);
+    el.className = 'flex items-center gap-1 text-xs px-3 py-1 rounded-full bg-gray-100 text-gray-400';
+  });
+  activateStep(0);
+  stepInterval = setInterval(() => {
+    stepIdx = Math.min(stepIdx + 1, STEPS.length - 1);
+    activateStep(stepIdx);
+  }, 3000);
+}
+
+function activateStep(i) {
+  const s = STEPS[i];
+  document.getElementById('loading-msg').textContent = s.msg;
+  // Mark previous steps done
+  for (let j = 0; j < i; j++) {
+    const el = document.getElementById(STEPS[j].id);
+    el.className = 'flex items-center gap-1 text-xs px-3 py-1 rounded-full bg-green-100 text-green-700';
+  }
+  // Mark current step active
+  const cur = document.getElementById(s.id);
+  cur.className = 'flex items-center gap-1 text-xs px-3 py-1 rounded-full bg-blue-100 text-brand font-semibold';
+}
+
+function stopLoading() {
+  clearInterval(stepInterval);
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('loading').classList.remove('flex');
+}
+
+// ============================================================
+// MAIN QUERY FUNCTION
+// ============================================================
+async function consultar() {
+  const placa = document.getElementById('placa-input').value.trim().toUpperCase();
+  const cedula = document.getElementById('cedula-input').value.trim();
+
+  if (!placa) { alert('Ingresa la placa del vehículo'); return; }
+  if (!cedula) { alert('Ingresa la cédula del propietario'); return; }
+
+  startLoading();
+
+  try {
+    const resp = await fetch(`${API_URL}/consultar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ placa, cedula }),
+    });
+
+    const json = await resp.json();
+
+    stopLoading();
+
+    if (!json.ok) {
+      showError(json.error || json.mensaje || 'Error desconocido');
+      return;
+    }
+
+    currentData = json.datos;
+    currentMensaje = json.mensaje || '';
+    renderResults(json.datos);
+
+  } catch (err) {
+    stopLoading();
+    showError('No se pudo conectar con el servidor. Verifica tu conexión e intenta de nuevo.');
+  }
+}
+
+function showError(msg) {
+  document.getElementById('error-msg').textContent = msg;
+  document.getElementById('error-box').classList.remove('hidden');
+}
+
+function resetForm() {
+  document.getElementById('error-box').classList.add('hidden');
+  document.getElementById('results').classList.add('hidden');
+}
+
+// ============================================================
+// RENDER ORCHESTRATOR
+// ============================================================
+function renderResults(d) {
+  if (!d) return;
+  const auth = d.auth || {};
+
+  renderVehiculo(auth);
+  renderSOATStatus(d.soat);
+  renderRTMStatus(d.tecnomecanica);
+  renderSIMITStatus(d.simit);
+  renderSOAT(d.soat);
+  renderRTM(d.tecnomecanica);
+  renderRC(d.responsabilidad_civil);
+  renderTarjetaOp(d.tarjeta_operacion);
+  renderLimitaciones(d.limitaciones);
+  renderSIMIT(d.simit);
+  renderAccordions(d);
+
+  // Print metadata
+  const info = auth.infoVehiculo || {};
+  document.getElementById('print-placa').textContent = `Placa: ${info.placa || ''} — ${info.marca || ''} ${info.linea || ''} ${info.modelo || ''}`;
+  document.getElementById('print-fecha').textContent = `Generado: ${new Date().toLocaleString('es-CO')}`;
+
+  document.getElementById('results').classList.remove('hidden');
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ============================================================
+// RENDER: VEHICLE HEADER
+// ============================================================
+function renderVehiculo(auth) {
+  const v = auth.infoVehiculo || {};
+  const props = auth.propietarios || [];
+  const activo = (v.estadoAutomotor || '').toUpperCase() === 'ACTIVO';
+  const propNames = props.map(p => p.nombrePropietario || '').filter(Boolean).join(', ');
+
+  const el = document.getElementById('card-vehiculo');
+  el.innerHTML = `
+    <div class="flex flex-wrap items-start gap-4">
+      <div class="flex-1 min-w-0">
+        <div class="flex flex-wrap items-center gap-3 mb-2">
+          <span class="bg-brand text-white text-2xl font-black px-5 py-2 rounded-xl tracking-widest shadow">${v.placa || '—'}</span>
+          <div>
+            <p class="text-xl font-bold text-gray-800">${v.marca || ''} ${v.linea || ''}</p>
+            <p class="text-gray-500 text-sm">${v.modelo || ''} &bull; ${v.color || ''} &bull; ${v.clase || ''}</p>
+          </div>
+          ${statusBadge(v.estadoAutomotor || 'DESCONOCIDO', activo)}
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <div class="bg-gray-50 rounded-xl p-3">
+            <p class="text-xs text-gray-400">Tipo Servicio</p>
+            <p class="font-semibold text-sm text-gray-700">${v.tipoServicio || '—'}</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-3">
+            <p class="text-xs text-gray-400">Combustible</p>
+            <p class="font-semibold text-sm text-gray-700">${v.tipoCombustible || '—'}</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-3">
+            <p class="text-xs text-gray-400">Cilindraje</p>
+            <p class="font-semibold text-sm text-gray-700">${v.cilindraje || '—'}</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-3">
+            <p class="text-xs text-gray-400">Pasajeros</p>
+            <p class="font-semibold text-sm text-gray-700">${v.pasajerosSentados || '—'}</p>
+          </div>
+        </div>
+        ${propNames ? `<p class="text-xs text-gray-500 mt-3"><i class="fa-solid fa-user mr-1"></i>Propietario(s): <span class="font-semibold text-gray-700">${propNames}</span></p>` : ''}
+      </div>
+      <div class="text-right space-y-1 shrink-0">
+        <p class="text-xs text-gray-400">Organismo de Tránsito</p>
+        <p class="text-sm font-semibold text-gray-600">${v.organismoTransito || '—'}</p>
+        <p class="text-xs text-gray-400 mt-2">Motor / Chasis</p>
+        <p class="text-xs font-mono text-gray-500">${v.numMotor || '—'}</p>
+        <p class="text-xs font-mono text-gray-500">${v.numChasis || '—'}</p>
+        ${v.prendas ? `<p class="text-xs text-amber-600 font-semibold mt-2"><i class="fa-solid fa-lock"></i> Con Prendas</p>` : ''}
+        ${v.gravamenes ? `<p class="text-xs text-amber-600 font-semibold"><i class="fa-solid fa-exclamation-triangle"></i> Con Gravámenes</p>` : ''}
+      </div>
+    </div>`;
+}
+
+// ============================================================
+// RENDER: STATUS CARDS (3 mini cards)
+// ============================================================
+function renderSOATStatus(soat) {
+  const latest = Array.isArray(soat) && soat.length ? soat[0] : null;
+  const vig = latest ? isVigente(latest.fechaVencimSoat) : false;
+  const el = document.getElementById('card-soat-status');
+  el.innerHTML = `
+    <div class="text-center">
+      <div class="text-4xl mb-2 ${vig ? 'text-green-500' : 'text-red-400'}">
+        <i class="fa-solid fa-shield${vig ? '-check' : '-xmark'}"></i>
+      </div>
+      <p class="font-bold text-gray-700">SOAT</p>
+      ${statusBadge(vig ? 'Vigente' : (latest ? 'Vencido' : 'Sin datos'), vig)}
+      ${latest ? `<p class="text-xs text-gray-400 mt-2">Vence: ${fmtFecha(latest.fechaVencimSoat)}</p>` : ''}
+      ${latest ? `<p class="text-xs text-gray-500">${latest.razonSocialAsegur || ''}</p>` : ''}
+    </div>`;
+}
+
+function renderRTMStatus(tec) {
+  // /rtms returns a list directly or a dict with "revisiones"
+  const revs = Array.isArray(tec) ? tec : (tec && tec.revisiones ? tec.revisiones : []);
+  const latest = revs.length ? revs[0] : null;
+  const vig = latest ? isVigente(latest.fechaVigencia) : false;
+  const el = document.getElementById('card-rtm-status');
+  el.innerHTML = `
+    <div class="text-center">
+      <div class="text-4xl mb-2 ${vig ? 'text-green-500' : 'text-red-400'}">
+        <i class="fa-solid fa-wrench"></i>
+      </div>
+      <p class="font-bold text-gray-700">Revisión Técnico-Mecánica</p>
+      ${statusBadge(vig ? 'Vigente' : (latest ? 'Vencida' : 'Sin datos'), vig)}
+      ${latest ? `<p class="text-xs text-gray-400 mt-2">Vence: ${fmtFecha(latest.fechaVigencia)}</p>` : ''}
+      ${latest ? `<p class="text-xs text-gray-500">${latest.nombreCda || ''}</p>` : ''}
+    </div>`;
+}
+
+function renderSIMITStatus(simit) {
+  const ok = simit && simit.pazSalvo;
+  const total = simit ? (simit.totalGeneral || 0) : 0;
+  const el = document.getElementById('card-simit-status');
+  el.innerHTML = `
+    <div class="text-center">
+      <div class="text-4xl mb-2 ${ok ? 'text-green-500' : 'text-red-400'}">
+        <i class="fa-solid fa-gavel"></i>
+      </div>
+      <p class="font-bold text-gray-700">SIMIT</p>
+      ${statusBadge(ok ? 'Paz y Salvo' : 'Con Deudas', ok)}
+      ${!ok && total ? `<p class="text-xs text-red-600 font-bold mt-2">${fmtMoney(total)}</p>` : ''}
+      ${ok ? `<p class="text-xs text-gray-400 mt-2">Sin multas pendientes</p>` : ''}
+    </div>`;
+}
+
+// ============================================================
+// RENDER: SOAT DETAIL
+// ============================================================
+function renderSOAT(soat) {
+  const el = document.getElementById('card-soat');
+  const list = Array.isArray(soat) ? soat : [];
+  if (!list.length) {
+    el.innerHTML = cardTitle('fa-shield', 'Póliza SOAT') + emptyState('Sin información de SOAT');
+    return;
+  }
+  const s = list[0];
+  const vig = isVigente(s.fechaVencimSoat);
+  el.innerHTML = cardTitle('fa-shield', 'Póliza SOAT') +
+    infoRow('No. Póliza', s.numSoat) +
+    infoRow('Aseguradora', s.razonSocialAsegur) +
+    infoRow('Inicio vigencia', fmtFecha(s.fechaInicioPoliza)) +
+    infoRow('Vencimiento', fmtFecha(s.fechaVencimSoat)) +
+    infoRow('Estado', statusBadge(s.estado || (vig ? 'Vigente' : 'Vencido'), vig));
+
+  if (list.length > 1) {
+    el.innerHTML += `<details class="mt-3"><summary class="text-xs text-brand cursor-pointer">Ver pólizas anteriores (${list.length - 1})</summary>
+      <div class="mt-2 space-y-2">
+      ${list.slice(1).map(s2 => `<div class="bg-gray-50 rounded-lg p-2 text-xs">${s2.numSoat} — ${s2.razonSocialAsegur} — ${fmtFecha(s2.fechaVencimSoat)}</div>`).join('')}
+      </div></details>`;
+  }
+}
+
+// ============================================================
+// RENDER: RTM DETAIL
+// ============================================================
+function renderRTM(tec) {
+  const el = document.getElementById('card-rtm');
+  // /rtms returns a list directly or a dict with "revisiones"
+  const revs = Array.isArray(tec) ? tec : (tec && tec.revisiones ? tec.revisiones : []);
+  if (!revs.length) {
+    el.innerHTML = cardTitle('fa-wrench', 'Revisión Técnico-Mecánica') + emptyState('Sin información de RTM');
+    return;
+  }
+  const r = revs[0];
+  const vig = isVigente(r.fechaVigencia);
+  el.innerHTML = cardTitle('fa-wrench', 'Revisión Técnico-Mecánica') +
+    infoRow('No. Certificado', r.nroCertificado) +
+    infoRow('CDA', r.nombreCda) +
+    infoRow('Fecha emisión', fmtFecha(r.fechaInicio)) +
+    infoRow('Vencimiento', fmtFecha(r.fechaVigencia)) +
+    infoRow('Estado', statusBadge(r.estado || (vig ? 'Vigente' : 'Vencida'), vig));
+
+  if (revs.length > 1) {
+    el.innerHTML += `<details class="mt-3"><summary class="text-xs text-brand cursor-pointer">Ver revisiones anteriores (${revs.length - 1})</summary>
+      <div class="mt-2 space-y-2">
+      ${revs.slice(1).map(r2 => `<div class="bg-gray-50 rounded-lg p-2 text-xs">${r2.nroCertificado} — ${r2.nombreCda} — Vence: ${fmtFecha(r2.fechaVigencia)}</div>`).join('')}
+      </div></details>`;
+  }
+}
+
+// ============================================================
+// RENDER: RESPONSABILIDAD CIVIL
+// ============================================================
+function renderRC(rc) {
+  const el = document.getElementById('card-rc');
+  const list = Array.isArray(rc) ? rc : [];
+  if (!list.length) {
+    el.innerHTML = cardTitle('fa-file-contract', 'Responsabilidad Civil') + emptyState('Sin información de RC');
+    return;
+  }
+  const r = list[0];
+  const vig = isVigente(r.fechaFinVigencia);
+  el.innerHTML = cardTitle('fa-file-contract', 'Responsabilidad Civil') +
+    infoRow('No. Póliza', r.numeroPoliza) +
+    infoRow('Tipo', r.tipoPoliza) +
+    infoRow('Entidad', r.entidadExpide) +
+    infoRow('Inicio', fmtFecha(r.fechaInicioVigencia)) +
+    infoRow('Vencimiento', fmtFecha(r.fechaFinVigencia)) +
+    infoRow('Estado', statusBadge(r.estado || (vig ? 'Vigente' : 'Vencida'), vig));
+}
+
+// ============================================================
+// RENDER: TARJETA DE OPERACIÓN
+// ============================================================
+function renderTarjetaOp(to) {
+  const el = document.getElementById('card-tarjeta-op');
+  if (!to || !to.nroTarjetaOperacion) {
+    el.innerHTML = cardTitle('fa-id-card', 'Tarjeta de Operación') + emptyState('No aplica para este vehículo');
+    return;
+  }
+  const vig = isVigente(to.fechaFin);
+  el.innerHTML = cardTitle('fa-id-card', 'Tarjeta de Operación') +
+    infoRow('No. Tarjeta', to.nroTarjetaOperacion) +
+    infoRow('Empresa', to.empresaAfiliadora) +
+    infoRow('Modalidad transporte', to.modalidadTransporte) +
+    infoRow('Modalidad servicio', to.modalidadServicio) +
+    infoRow('Radio de acción', to.radioAccion) +
+    infoRow('Inicio', fmtFecha(to.fechaInicio)) +
+    infoRow('Vencimiento', fmtFecha(to.fechaFin)) +
+    infoRow('Estado', statusBadge(to.estado || (vig ? 'Vigente' : 'Vencida'), vig));
+}
+
+// ============================================================
+// RENDER: LIMITACIONES
+// ============================================================
+function renderLimitaciones(lim) {
+  const el = document.getElementById('card-limitaciones');
+  const list = Array.isArray(lim) ? lim : [];
+  if (!list.length) {
+    el.innerHTML = `
+      <div class="flex items-center gap-3">
+        <i class="fa-solid fa-circle-check text-green-500 text-2xl"></i>
+        <div>
+          <h3 class="font-bold text-green-700">Sin Limitaciones</h3>
+          <p class="text-green-600 text-sm">El vehículo no registra limitaciones de circulación</p>
+        </div>
+      </div>`;
+    return;
+  }
+  el.innerHTML = `
+    <div class="flex items-center gap-2 mb-3">
+      <i class="fa-solid fa-triangle-exclamation text-red-500 text-xl"></i>
+      <h3 class="font-bold text-red-700 uppercase tracking-wide text-sm">Limitaciones (${list.length})</h3>
+    </div>
+    <div class="space-y-3">
+      ${list.map(l => `
+        <div class="bg-red-50 border border-red-200 rounded-xl p-4">
+          <div class="flex justify-between flex-wrap gap-2">
+            <span class="font-semibold text-red-800">${l.tipoLimitacion || '—'}</span>
+            <span class="font-bold text-red-700">${fmtMoney(l.valorMulta)}</span>
+          </div>
+          <p class="text-sm text-red-600">${l.entidadJuridica || ''} &bull; ${l.municipio || ''}</p>
+        </div>`).join('')}
+    </div>`;
+}
+
+// ============================================================
+// RENDER: SIMIT MULTAS
+// ============================================================
+function renderSIMIT(simit) {
+  const el = document.getElementById('card-simit');
+  if (!simit) {
+    el.innerHTML = cardTitle('fa-gavel', 'SIMIT — Estado de Cuenta') + emptyState('Sin información de SIMIT');
+    return;
+  }
+
+  if (simit.pazSalvo) {
+    el.innerHTML = `
+      <div class="flex items-center gap-4 p-4 bg-green-50 rounded-xl border border-green-200">
+        <i class="fa-solid fa-circle-check text-green-500 text-4xl"></i>
+        <div>
+          <h3 class="font-black text-green-700 text-xl">Paz y Salvo</h3>
+          <p class="text-green-600">Este vehículo no registra multas ni comparendos pendientes en SIMIT</p>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const multas = simit.multas || [];
+  const comparendos = simit.comparendos || [];
+  const acuerdos = simit.acuerdosPago || [];
+
+  el.innerHTML = `
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <h3 class="text-brand font-bold text-sm uppercase tracking-wide flex items-center gap-2">
+        <i class="fa-solid fa-gavel text-red-500"></i> SIMIT — Estado de Cuenta
+      </h3>
+      <div class="bg-red-600 text-white font-black px-4 py-2 rounded-xl text-sm">
+        Total: ${fmtMoney(simit.totalGeneral)}
+      </div>
+    </div>
+    ${multas.length ? `
+      <h4 class="font-semibold text-gray-600 text-xs uppercase tracking-wide mb-2 mt-2">Multas (${multas.length})</h4>
+      <div class="space-y-3">
+        ${multas.map(m => `
+          <div class="border border-red-100 bg-red-50 rounded-xl p-4">
+            <div class="flex justify-between flex-wrap gap-2 mb-1">
+              <span class="font-semibold text-gray-800 text-sm">Res. ${m.numeroResolucion || '—'}</span>
+              <span class="font-bold text-red-700">${fmtMoney(m.valorPagar)}</span>
+            </div>
+            <div class="flex gap-3 flex-wrap text-xs text-gray-500 mb-2">
+              <span><i class="fa-regular fa-calendar mr-1"></i>${fmtFecha(m.fechaResolucion)}</span>
+              <span><i class="fa-solid fa-building-columns mr-1"></i>${m.organismoTransito || '—'}</span>
+              <span class="text-amber-600 font-semibold">${m.estadoCartera || ''}</span>
+            </div>
+            ${(m.infracciones || []).map(i => `
+              <div class="bg-white rounded-lg px-3 py-1.5 text-xs text-gray-600 mt-1 border border-red-100">
+                <span class="font-mono font-bold text-red-600 mr-2">${i.codigoInfraccion || ''}</span>${i.descripcionInfraccion || ''}
+              </div>`).join('')}
+            ${m.valorIntereses ? `<p class="text-xs text-gray-400 mt-1">Intereses: ${fmtMoney(m.valorIntereses)}</p>` : ''}
+          </div>`).join('')}
+      </div>` : ''}
+    ${comparendos.length ? `
+      <h4 class="font-semibold text-gray-600 text-xs uppercase tracking-wide mb-2 mt-4">Comparendos (${comparendos.length})</h4>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead><tr class="bg-gray-100">
+            <th class="p-2 text-left">No.</th><th class="p-2 text-left">Fecha</th>
+            <th class="p-2 text-left">Estado</th><th class="p-2 text-right">Valor</th>
+          </tr></thead>
+          <tbody>
+            ${comparendos.map(c => `<tr class="border-b border-gray-50">
+              <td class="p-2 font-mono">${c.numeroResolucion || c.noComparendo || '—'}</td>
+              <td class="p-2">${fmtFecha(c.fechaResolucion || c.fecha)}</td>
+              <td class="p-2">${c.estadoCartera || c.estado || '—'}</td>
+              <td class="p-2 text-right font-semibold text-red-600">${fmtMoney(c.valorPagar)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>` : ''}
+    ${acuerdos.length ? `
+      <h4 class="font-semibold text-gray-600 text-xs uppercase tracking-wide mb-2 mt-4">Acuerdos de Pago (${acuerdos.length})</h4>
+      <div class="space-y-1">
+        ${acuerdos.map(a => `<div class="bg-amber-50 border border-amber-200 rounded-lg p-2 text-xs">
+          ${JSON.stringify(a)}
+        </div>`).join('')}
+      </div>` : ''}`;
+}
+
+// ============================================================
+// RENDER: ACCORDIONS
+// ============================================================
+function renderAccordions(d) {
+  const sections = [
+    {
+      title: 'Garantías y Prendas',
+      icon: 'fa-lock',
+      content: renderGarantiasHTML(d.garantias, d.garantias_prendas)
+    },
+    {
+      title: 'Solicitudes',
+      icon: 'fa-file-lines',
+      content: renderSolicitudesHTML(d.solicitudes)
+    },
+    {
+      title: 'Blindaje',
+      icon: 'fa-shield',
+      content: renderBlindajeHTML(d.blindaje)
+    },
+    {
+      title: 'Póliza Caución',
+      icon: 'fa-file-contract',
+      content: renderPolizaCaucionHTML(d.poliza_caucion)
+    },
+    {
+      title: 'DIJIN',
+      icon: 'fa-star-of-david',
+      content: renderSimpleHTML(d.dijin, ['noCertificado','entidadCertificado','estadoCertificado','fechaExpedicion'])
+    },
+    {
+      title: 'Normalización',
+      icon: 'fa-arrows-rotate',
+      content: renderNormalizacionHTML(d.normalizacion)
+    },
+    {
+      title: 'Permisos PCR',
+      icon: 'fa-key',
+      content: renderPCRHTML(d.permisos_pcr)
+    },
+    {
+      title: 'Repotenciado',
+      icon: 'fa-bolt',
+      content: renderSimpleHTML(d.repotenciado, ['repotenciado','modeloRepotenciado','fechaRepotenciacion'])
+    },
+    {
+      title: 'Desintegración',
+      icon: 'fa-trash-can',
+      content: renderDesintegracionHTML(d.desintegracion, d.certificado_desintegracion)
+    },
+  ];
+
+  const el = document.getElementById('card-accordions');
+  el.innerHTML = sections.map((s, i) => `
+    <div class="border-b border-gray-100 last:border-0">
+      <button onclick="toggleAccordion(${i})"
+        class="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition text-left">
+        <span class="flex items-center gap-2 font-semibold text-gray-700 text-sm">
+          <i class="fa-solid ${s.icon} text-brand-light w-4"></i> ${s.title}
+        </span>
+        <i id="chevron-${i}" class="fa-solid fa-chevron-down text-gray-400 accordion-chevron"></i>
+      </button>
+      <div id="acc-${i}" class="accordion-content">
+        <div class="px-5 pb-4">${s.content}</div>
+      </div>
+    </div>`).join('');
+}
+
+function toggleAccordion(i) {
+  const content = document.getElementById(`acc-${i}`);
+  const chevron = document.getElementById(`chevron-${i}`);
+  content.classList.toggle('open');
+  chevron.classList.toggle('open');
+}
+
+function renderGarantiasHTML(garantias, prendas) {
+  const g = Array.isArray(garantias) ? garantias : [];
+  const p = Array.isArray(prendas) ? prendas : [];
+  if (!g.length && !p.length) return emptyState('Sin garantías ni prendas registradas');
+  return (g.length ? `<div class="mb-3"><p class="text-xs font-semibold text-gray-500 mb-2">Garantías</p>
+    ${g.map(x => `<div class="bg-gray-50 rounded-lg p-3 text-sm mb-2">
+      ${infoRow('Acreedor', x.acreedor)}${infoRow('Tipo', x.tipoGarantia)}${infoRow('Fecha registro', fmtFecha(x.fechaRegistro))}
+    </div>`).join('')}</div>` : '') +
+    (p.length ? `<div><p class="text-xs font-semibold text-gray-500 mb-2">Prendas</p>
+    ${p.map(x => `<div class="bg-gray-50 rounded-lg p-3 text-sm mb-2">${infoRow('Acreedor', x.acreedor)}${infoRow('Estado', x.estado)}</div>`).join('')}</div>` : '');
+}
+
+function renderSolicitudesHTML(solicitudes) {
+  const list = Array.isArray(solicitudes) ? solicitudes : [];
+  if (!list.length) return emptyState('Sin solicitudes registradas');
+  return `<div class="space-y-3">${list.map(s => `
+    <div class="bg-gray-50 rounded-xl p-3 text-sm">
+      ${infoRow('No. Solicitud', s.noSolicitud)}
+      ${infoRow('Estado', s.estado)}
+      ${infoRow('Trámites', s.tramitesRealizados)}
+      ${infoRow('Entidad', s.entidad)}
+      ${infoRow('Fecha', fmtFecha(s.fechaSolicitud))}
+    </div>`).join('')}</div>`;
+}
+
+function renderBlindajeHTML(b) {
+  if (!b || !b.blindado) return emptyState('No reporta blindaje');
+  return `<div class="bg-gray-50 rounded-xl p-3 text-sm">
+    ${infoRow('Blindado', b.blindado ? 'Sí' : 'No')}
+    ${infoRow('Nivel', b.nivelBlindaje)}
+    ${infoRow('Tipo', b.tipoBlindajeNombre)}
+    ${infoRow('No. Resolución', b.numeroResolucion)}
+    ${infoRow('Fecha expedición', fmtFecha(b.fechaExpedicionCertificado))}
+  </div>`;
+}
+
+function renderPolizaCaucionHTML(pc) {
+  if (!pc || !pc.noPoliza) return emptyState('Sin póliza de caución registrada');
+  return `<div class="bg-gray-50 rounded-xl p-3 text-sm">
+    ${infoRow('No. Póliza', pc.noPoliza)}
+    ${infoRow('Estado', pc.estadoPoliza)}
+    ${infoRow('Expedición', fmtFecha(pc.fechaExpedicion))}
+    ${infoRow('Vigencia', fmtFecha(pc.fechaVigenciaPoliza))}
+    ${infoRow('No. Certificación', pc.noCertificacion)}
+  </div>`;
+}
+
+function renderSimpleHTML(obj, fields) {
+  if (!obj || Object.values(obj).every(v => !v)) return emptyState('Sin información');
+  const labels = {
+    noCertificado: 'No. Certificado', entidadCertificado: 'Entidad',
+    estadoCertificado: 'Estado', fechaExpedicion: 'Fecha expedición',
+    repotenciado: 'Repotenciado', modeloRepotenciado: 'Modelo',
+    fechaRepotenciacion: 'Fecha repotenciación'
+  };
+  return `<div class="bg-gray-50 rounded-xl p-3 text-sm">
+    ${fields.map(f => infoRow(labels[f] || f, f.startsWith('fecha') ? fmtFecha(obj[f]) : (obj[f] != null ? String(obj[f]) : ''))).join('')}
+  </div>`;
+}
+
+function renderNormalizacionHTML(list) {
+  const arr = Array.isArray(list) ? list : [];
+  if (!arr.length) return emptyState('Sin normalización registrada');
+  return arr.map(n => `<div class="bg-gray-50 rounded-xl p-3 text-sm mb-2">
+    ${infoRow('Normalizado', n.vehiculoNormalizado)}
+    ${infoRow('Deficiencia', n.deficienciaMatriculaInicial)}
+    ${infoRow('Acto administrativo', n.numeroActoAdministrativo)}
+    ${infoRow('Fecha', fmtFecha(n.fecha))}
+  </div>`).join('');
+}
+
+function renderPCRHTML(list) {
+  const arr = Array.isArray(list) ? list : [];
+  if (!arr.length) return emptyState('Sin permisos PCR registrados');
+  return arr.map(p => `<div class="bg-gray-50 rounded-xl p-3 text-sm mb-2">
+    ${infoRow('No. Permiso', p.nroPermiso)}
+    ${infoRow('Inicio', fmtFecha(p.fechaInicio))}
+    ${infoRow('Fin', fmtFecha(p.fechaFin))}
+    ${infoRow('Estado', p.estado)}
+  </div>`).join('');
+}
+
+function renderDesintegracionHTML(des, cert) {
+  if ((!des || !des.desintegrar) && (!cert || !cert.noCertificado)) {
+    return emptyState('No registra proceso de desintegración');
+  }
+  return `<div class="bg-gray-50 rounded-xl p-3 text-sm">
+    ${des ? infoRow('Desintegrar', des.desintegrar ? 'Sí' : 'No') : ''}
+    ${cert && cert.noCertificado ? `
+      ${infoRow('No. Certificado', cert.noCertificado)}
+      ${infoRow('Estado', cert.estadoCertificado)}
+      ${infoRow('Expedición', fmtFecha(cert.fechaExpedicion))}
+      ${infoRow('Entidad desintegradora', cert.entidadDesintegradora)}` : ''}
+  </div>`;
+}
+
+// ============================================================
+// WHATSAPP COPY
+// ============================================================
+async function copiarWhatsApp() {
+  const text = currentMensaje || generarTextoWhatsApp();
+  try {
+    await navigator.clipboard.writeText(text);
+    const btn = event.target.closest('button');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '<i class="fa-solid fa-check"></i> Copiado!';
+    btn.classList.add('bg-green-800');
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('bg-green-800'); }, 2000);
+  } catch {
+    prompt('Copia este texto:', text);
+  }
+}
+
+function generarTextoWhatsApp() {
+  if (!currentData) return '';
+  const v = (currentData.auth || {}).infoVehiculo || {};
+  const soat = Array.isArray(currentData.soat) && currentData.soat.length ? currentData.soat[0] : null;
+  const simit = currentData.simit || {};
+  return [
+    `*🚗 Speedy — Consulta Vehicular*`,
+    `Placa: *${v.placa || '—'}*`,
+    `${v.marca || ''} ${v.linea || ''} ${v.modelo || ''}`.trim(),
+    `Estado: ${v.estadoAutomotor || '—'}`,
+    ``,
+    `*SOAT:* ${soat ? (isVigente(soat.fechaVencimSoat) ? '✅ Vigente' : '❌ Vencido') + ' — ' + fmtFecha(soat.fechaVencimSoat) : 'Sin datos'}`,
+    `*SIMIT:* ${simit.pazSalvo ? '✅ Paz y Salvo' : '❌ Deuda: ' + fmtMoney(simit.totalGeneral)}`,
+    ``,
+    `_Consulta realizada ${new Date().toLocaleString('es-CO')}_`
+  ].join('\n');
+}
+
+// ============================================================
+// KEYBOARD SHORTCUT: Enter to submit
+// ============================================================
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') consultar();
+});
+</script>
+</body>
+</html>
