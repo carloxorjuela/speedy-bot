@@ -674,8 +674,8 @@ class SimitScraper:
 if __name__ == "__main__":
     import sys
 
-    placa = sys.argv[1] if len(sys.argv) > 1 else "RRC10H"
-    cedula = sys.argv[2] if len(sys.argv) > 2 else "1010960147"
+    placa = sys.argv[1] if len(sys.argv) > 1 else "PWR324"
+    cedula = sys.argv[2] if len(sys.argv) > 2 else "901282494"
 
     print(f"\nConsultando placa: {placa}, cédula: {cedula}\n")
 

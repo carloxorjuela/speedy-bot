@@ -10,7 +10,6 @@ from functools import wraps
 from flask import Flask, request, jsonify, send_from_directory, redirect
 
 # ── Path resolution ──────────────────────────────────────────────────────────
-# Support both Docker (/app) and local execution (directory of this file)
 _HERE = os.path.dirname(os.path.abspath(__file__))
 for _candidate in ('/app', _HERE):
     if _candidate not in sys.path:
@@ -27,14 +26,12 @@ DB_PATH   = os.environ.get('DB_PATH', os.path.join(_HERE, 'carplus.db'))
 
 # ── Database ──────────────────────────────────────────────────────────────────
 def get_db():
-    """Return a thread-local SQLite connection with row_factory set."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
-    """Create tables if they don't exist."""
     with get_db() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS consultas (
@@ -81,7 +78,6 @@ init_db()
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 def mask_cedula(c: str) -> str:
-    """Show first 2 and last 2 characters; mask the rest with '*'."""
     if not c:
         return ''
     c = str(c)
@@ -99,7 +95,6 @@ def _today_str() -> str:
 
 
 def _get_client_ip() -> str:
-    # Respect X-Forwarded-For when behind a proxy
     xff = request.headers.get('X-Forwarded-For', '')
     if xff:
         return xff.split(',')[0].strip()
@@ -119,16 +114,14 @@ def _log_consulta(placa: str, cedula_masked: str, success: bool,
             )
             conn.commit()
     except Exception:
-        traceback.print_exc()  # Never let logging crash the request
+        traceback.print_exc()
 
 # ── Placa cache helper ────────────────────────────────────────────────────────
 def _upsert_placa_cache(placa: str, cedula_masked: str, datos: dict):
-    """Parse datos dict and upsert into placas_cache."""
     try:
         auth = datos.get('auth', {}) or {}
         info = (auth.get('infoVehiculo') or {})
 
-        # SOAT — pick the policy with the latest expiry date (not simply last in list)
         soat_list = datos.get('soat') or []
         soat_vence = soat_aseguradora = soat_estado = None
         if isinstance(soat_list, list) and soat_list:
@@ -139,9 +132,6 @@ def _upsert_placa_cache(placa: str, cedula_masked: str, datos: dict):
             soat_aseguradora = s.get('razonSocialAsegur')
             soat_estado = s.get('estado')
 
-        # RTM — from solicitudes (peticiones) filtered by RTM trámite
-        # /rtms returns empty; RTM certifications live in solicitudes.
-        # There is no fechaVigencia field — expiry = fechaSolicitud + 1 year.
         sol_list = datos.get('solicitudes') or []
         rtm_sol = None
         if isinstance(sol_list, list):
@@ -166,7 +156,6 @@ def _upsert_placa_cache(placa: str, cedula_masked: str, datos: dict):
             rtm_cda = rtm_sol.get('entidad')
             rtm_estado = rtm_sol.get('estado')
 
-        # Responsabilidad Civil — prefer active policy with latest expiry
         rc_list = datos.get('responsabilidad_civil') or []
         rc_vence = rc_estado = None
         if isinstance(rc_list, list) and rc_list:
@@ -178,7 +167,6 @@ def _upsert_placa_cache(placa: str, cedula_masked: str, datos: dict):
             rc_vence = raw[:10] if raw else None
             rc_estado = rc_item.get('estado')
 
-        # Tarjeta operación
         to = datos.get('tarjeta_operacion') or {}
         to_vence = to_estado = None
         if isinstance(to, dict):
@@ -186,7 +174,6 @@ def _upsert_placa_cache(placa: str, cedula_masked: str, datos: dict):
             to_vence = raw[:10] if raw else None
             to_estado = to.get('estado')
 
-        # SIMIT
         simit = datos.get('simit') or {}
         paz_salvo = int(bool(simit.get('pazSalvo', False))) if isinstance(simit, dict) else 0
         simit_total = float(simit.get('totalGeneral', 0) or 0) if isinstance(simit, dict) else 0.0
@@ -280,10 +267,11 @@ def consultar():
     body   = request.get_json(force=True, silent=True) or {}
     placa  = str(body.get('placa',  '')).upper().strip()
     cedula = str(body.get('cedula', '')).strip()
+    nombre = str(body.get('nombre', 'Conductor')).strip()
     ip     = _get_client_ip()
 
     if not placa or not cedula:
-        return jsonify({'ok': False, 'error': 'placa y cedula son requeridos'}), 400
+        return jsonify({"ok": False, "error": "placa y cedula son requeridos"}), 400
 
     cedula_masked = mask_cedula(cedula)
     t0 = time.monotonic()
@@ -296,25 +284,33 @@ def consultar():
         datos['simit'] = simit.consultar(placa)
         _upsert_placa_cache(placa, cedula_masked, datos)
 
-        mensaje = runt.formatear_para_whatsapp(datos)
+        mensaje    = runt.formatear_speedy_bot(datos, conductor_nombre=nombre,
+                                               cedula=cedula, placa=placa)
+        documentos = runt._extraer_documentos(datos)
 
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         _log_consulta(placa, cedula_masked, True, None, elapsed_ms, ip)
 
-        return jsonify({'ok': True, 'mensaje': mensaje, 'datos': datos})
+        return jsonify({
+            'ok':           True,
+            'mensaje':      mensaje,
+            'documentos':   documentos,
+            'pdf_filename': '',
+        })
 
     except Exception as exc:
         traceback.print_exc()
         elapsed_ms = int((time.monotonic() - t0) * 1000)
         _log_consulta(placa, cedula_masked, False, str(exc), elapsed_ms, ip)
-        return jsonify({'ok': False, 'error': str(exc)}), 500
+        # Retorna 200 para que n8n no aborte el flujo y pueda resetear el estado
+        return jsonify({'ok': False, 'error': str(exc)})
 
-# ── Placas page — redirect to admin (placas tab is now embedded in admin) ─────
+# ── Placas page ───────────────────────────────────────────────────────────────
 @app.route('/placas')
 def placas_page():
     return redirect('/admin')
 
-# ── Preoperacional page ────────────────────────────────────────────────────────
+# ── Preoperacional page ───────────────────────────────────────────────────────
 @app.route('/preoperacional')
 def preoperacional_page():
     return send_from_directory(_HERE, 'preoperacional.html')
@@ -364,61 +360,46 @@ def admin_metrics():
     try:
         conn = get_db()
 
-        total_consultas = conn.execute(
-            'SELECT COUNT(*) FROM consultas'
-        ).fetchone()[0]
-
+        total_consultas = conn.execute('SELECT COUNT(*) FROM consultas').fetchone()[0]
         consultas_hoy = conn.execute(
             "SELECT COUNT(*) FROM consultas WHERE timestamp LIKE ?",
             (_today_str() + '%',)
         ).fetchone()[0]
-
         success_count = conn.execute(
             'SELECT COUNT(*) FROM consultas WHERE success = 1'
         ).fetchone()[0]
-
         tasa_exito = (
             round(success_count / total_consultas * 100, 2)
             if total_consultas else 0.0
         )
-
         tiempo_promedio_row = conn.execute(
             'SELECT AVG(response_time_ms) FROM consultas WHERE response_time_ms IS NOT NULL'
         ).fetchone()[0]
         tiempo_promedio_ms = int(tiempo_promedio_row) if tiempo_promedio_row else 0
 
-        # Top 10 placas
         top_placas_rows = conn.execute(
             """SELECT placa, COUNT(*) AS consultas
-               FROM consultas
-               GROUP BY placa
-               ORDER BY consultas DESC
-               LIMIT 10"""
+               FROM consultas GROUP BY placa
+               ORDER BY consultas DESC LIMIT 10"""
         ).fetchall()
         top_placas = [{'placa': r['placa'], 'consultas': r['consultas']} for r in top_placas_rows]
 
-        # Consultas por día — últimos 7 días
         dias_rows = conn.execute(
-            """SELECT substr(timestamp, 1, 10)        AS dia,
-                      COUNT(*)                        AS total,
+            """SELECT substr(timestamp, 1, 10) AS dia,
+                      COUNT(*) AS total,
                       SUM(CASE WHEN success=1 THEN 1 ELSE 0 END) AS exitosas
-               FROM consultas
-               WHERE timestamp >= date('now', '-6 days')
-               GROUP BY dia
-               ORDER BY dia"""
+               FROM consultas WHERE timestamp >= date('now', '-6 days')
+               GROUP BY dia ORDER BY dia"""
         ).fetchall()
         consultas_por_dia = [
             {'dia': r['dia'], 'total': r['total'], 'exitosas': r['exitosas']}
             for r in dias_rows
         ]
 
-        # Consultas por hora (0–23)
         horas_rows = conn.execute(
             """SELECT substr(timestamp, 12, 2) || ':00' AS hora,
-                      COUNT(*)                          AS n
-               FROM consultas
-               GROUP BY hora
-               ORDER BY hora"""
+                      COUNT(*) AS n
+               FROM consultas GROUP BY hora ORDER BY hora"""
         ).fetchall()
         consultas_por_hora = [{'hora': r['hora'], 'n': r['n']} for r in horas_rows]
 
@@ -448,18 +429,13 @@ def admin_logs():
         offset   = (page - 1) * per_page
 
         conn = get_db()
-
         total = conn.execute('SELECT COUNT(*) FROM consultas').fetchone()[0]
-
         rows = conn.execute(
             """SELECT id, timestamp, placa, cedula_masked,
                       success, error_msg, response_time_ms, ip
-               FROM consultas
-               ORDER BY id DESC
-               LIMIT ? OFFSET ?""",
+               FROM consultas ORDER BY id DESC LIMIT ? OFFSET ?""",
             (per_page, offset)
         ).fetchall()
-
         conn.close()
 
         logs = [
@@ -476,12 +452,7 @@ def admin_logs():
             for r in rows
         ]
 
-        return jsonify({
-            'total':    total,
-            'page':     page,
-            'per_page': per_page,
-            'logs':     logs,
-        })
+        return jsonify({'total': total, 'page': page, 'per_page': per_page, 'logs': logs})
 
     except Exception as exc:
         traceback.print_exc()

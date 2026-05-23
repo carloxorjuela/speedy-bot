@@ -3,3 +3,4 @@ gunicorn
 requests
 ddddocr
 playwright
+fpdf2>=2.8.0
