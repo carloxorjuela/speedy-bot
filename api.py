@@ -23,7 +23,7 @@ app = Flask(__name__)
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 ADMIN_KEY = os.environ.get('ADMIN_KEY', 'speedy-admin-2026')
-DB_PATH   = os.path.join(_HERE, 'carplus.db')
+DB_PATH   = os.environ.get('DB_PATH', os.path.join(_HERE, 'carplus.db'))
 
 # ── Database ──────────────────────────────────────────────────────────────────
 def get_db():

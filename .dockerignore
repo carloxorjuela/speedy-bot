@@ -1,0 +1,8 @@
+__pycache__
+*.pyc
+*.png
+test_*.py
+capture_simit*.py
+test_state.json
+CONTEXTO.md
+.git
