@@ -1033,11 +1033,13 @@ function toggleMultasFilter() {
   filterMultas = !filterMultas;
   const btn = document.getElementById('btn-filter-multas');
   if (filterMultas) {
-    btn.classList.add('border-red-400', 'text-red-600', 'bg-red-50');
-    btn.classList.remove('border-gray-200', 'text-gray-600');
+    btn.style.borderColor = '#f87171';
+    btn.style.color = '#dc2626';
+    btn.style.backgroundColor = '#fef2f2';
   } else {
-    btn.classList.remove('border-red-400', 'text-red-600', 'bg-red-50');
-    btn.classList.add('border-gray-200', 'text-gray-600');
+    btn.style.borderColor = '';
+    btn.style.color = '';
+    btn.style.backgroundColor = '';
   }
   applyFilters();
 }

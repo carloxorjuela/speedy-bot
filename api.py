@@ -314,6 +314,11 @@ def consultar():
 def placas_page():
     return redirect('/admin')
 
+# ── Preoperacional page ────────────────────────────────────────────────────────
+@app.route('/preoperacional')
+def preoperacional_page():
+    return send_from_directory(_HERE, 'preoperacional.html')
+
 # ── Admin: placas cache ───────────────────────────────────────────────────────
 @app.route('/admin/placas', methods=['GET'])
 @require_admin

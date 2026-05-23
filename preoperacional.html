@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Revisión Preoperacional — Speedy</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { colors: { brand: { DEFAULT: '#1E3A8A', light: '#2563EB', dark: '#172a6e' } } } }
+    }
+  </script>
+  <style>
+    body { font-family: 'Segoe UI', system-ui, sans-serif; }
+    .section-card { background: white; border-radius: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 1.5rem; margin-bottom: 1.25rem; }
+    .section-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: #1E3A8A; border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 0.5rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .form-label { display: block; font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.05em; color: #64748b; margin-bottom: 0.25rem; }
+    .form-input { width: 100%; border: 2px solid #e2e8f0; border-radius: 0.6rem; padding: 0.5rem 0.75rem;
+      font-size: 0.875rem; transition: border-color 0.15s; outline: none; }
+    .form-input:focus { border-color: #1E3A8A; }
+    /* Radio check buttons */
+    .radio-group { display: flex; gap: 0.35rem; }
+    .radio-opt input { display: none; }
+    .radio-opt label { display: inline-flex; align-items: center; justify-content: center;
+      padding: 0.2rem 0.65rem; border-radius: 0.4rem; font-size: 0.7rem; font-weight: 700;
+      cursor: pointer; border: 2px solid #e2e8f0; color: #94a3b8; transition: all 0.15s; white-space: nowrap; }
+    .radio-opt input:checked + label { border-color: transparent; }
+    .radio-opt.cumple   input:checked + label { background: #dcfce7; color: #15803d; border-color: #86efac; }
+    .radio-opt.nocumple input:checked + label { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+    .radio-opt.noaplica input:checked + label { background: #f1f5f9; color: #64748b; border-color: #cbd5e1; }
+    .radio-opt.si       input:checked + label { background: #dcfce7; color: #15803d; border-color: #86efac; }
+    .radio-opt.no       input:checked + label { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+    /* Check rows */
+    .check-row { display: grid; grid-template-columns: 1fr auto; gap: 0.75rem;
+      align-items: center; padding: 0.55rem 0; border-bottom: 1px solid #f1f5f9; }
+    .check-row:last-child { border-bottom: none; }
+    .check-row .item-label { font-size: 0.82rem; color: #334155; font-weight: 500; }
+    /* Doc row */
+    .doc-row { display: grid; grid-template-columns: 1fr auto auto; gap: 0.75rem;
+      align-items: center; padding: 0.55rem 0; border-bottom: 1px solid #f1f5f9; }
+    .doc-row:last-child { border-bottom: none; }
+    /* Signature canvas */
+    #firma-canvas { border: 2px dashed #cbd5e1; border-radius: 0.75rem; background: #f8fafc;
+      cursor: crosshair; touch-action: none; display: block; }
+    /* Print */
+    @media print {
+      .no-print { display: none !important; }
+      body { background: white; }
+      .section-card { box-shadow: none; border: 1px solid #e2e8f0; break-inside: avoid; }
+      header { background: #1E3A8A !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<!-- HEADER -->
+<header class="bg-brand shadow-lg no-print">
+  <div class="max-w-4xl mx-auto px-4 py-4 flex items-center gap-3">
+    <div class="bg-white/10 rounded-xl p-2">
+      <i class="fa-solid fa-car text-white text-2xl"></i>
+    </div>
+    <div>
+      <h1 class="text-white text-xl font-bold">Speedy</h1>
+      <p class="text-blue-200 text-xs">Revisión Preoperacional Vehicular</p>
+    </div>
+    <div class="ml-auto flex items-center gap-2">
+      <a href="/" class="text-blue-200 hover:text-white text-sm flex items-center gap-1 transition">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <span class="hidden sm:inline">Consulta</span>
+      </a>
+      <a href="/admin" class="text-blue-200 hover:text-white text-sm flex items-center gap-1 transition ml-3">
+        <i class="fa-solid fa-chart-line"></i>
+        <span class="hidden sm:inline">Admin</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="max-w-4xl mx-auto px-4 py-6">
+
+  <!-- TOP ACTION BAR -->
+  <div class="flex items-center justify-between mb-5 flex-wrap gap-3 no-print">
+    <div>
+      <h2 class="font-bold text-gray-800 text-lg">Revisión Preoperacional</h2>
+      <p class="text-gray-400 text-sm">Transporte Especial · Diligenciar antes de cada servicio</p>
+    </div>
+    <div class="flex gap-2 flex-wrap">
+      <button onclick="guardarBorrador()"
+        class="border-2 border-gray-200 hover:border-brand text-gray-600 hover:text-brand px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+        <i class="fa-solid fa-floppy-disk"></i> Guardar borrador
+      </button>
+      <button onclick="window.print()"
+        class="bg-gray-700 hover:bg-gray-800 text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+        <i class="fa-solid fa-print"></i> Imprimir
+      </button>
+      <button onclick="generarPDF()"
+        class="bg-brand hover:bg-brand-light text-white px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-2">
+        <i class="fa-solid fa-file-pdf"></i> Descargar PDF
+      </button>
+    </div>
+  </div>
+
+  <!-- BORRADOR NOTICE -->
+  <div id="borrador-notice" class="hidden mb-4 bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-center gap-2 no-print">
+    <i class="fa-solid fa-circle-info text-blue-500"></i>
+    <p class="text-blue-700 text-sm font-medium">Borrador cargado. Verifica los datos antes de imprimir.</p>
+    <button onclick="limpiarBorrador()" class="ml-auto text-blue-400 hover:text-blue-600 text-xs underline">Limpiar</button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- SECCIÓN 1: INFORMACIÓN GENERAL              -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div class="section-card">
+    <div class="section-title"><i class="fa-solid fa-clipboard-list"></i> Información General</div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <label class="form-label">Fecha</label>
+        <input id="f-fecha" type="date" class="form-input" />
+      </div>
+      <div>
+        <label class="form-label">Hora</label>
+        <input id="f-hora" type="time" class="form-input" />
+      </div>
+      <div>
+        <label class="form-label">Placa del Vehículo</label>
+        <input id="f-placa" type="text" maxlength="7" placeholder="ABC123"
+          class="form-input uppercase" oninput="this.value=this.value.toUpperCase()" />
+      </div>
+      <div>
+        <label class="form-label">Kilometraje Actual</label>
+        <input id="f-km" type="number" min="0" placeholder="Ej: 23000" class="form-input" />
+      </div>
+      <div>
+        <label class="form-label">Nombre del Conductor</label>
+        <input id="f-conductor" type="text" placeholder="Nombre completo" class="form-input" />
+      </div>
+      <div>
+        <label class="form-label">Número de Cédula</label>
+        <input id="f-cedula" type="text" placeholder="Ej: 10234567" class="form-input" />
+      </div>
+      <div class="sm:col-span-2 lg:col-span-3">
+        <label class="form-label">Correo Electrónico</label>
+        <input id="f-correo" type="email" placeholder="ejemplo@empresa.com" class="form-input" style="text-transform:none" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- SECCIÓN 2: REQUISITOS DOCUMENTALES          -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div class="section-card">
+    <div class="section-title"><i class="fa-solid fa-folder-open"></i> Requisitos Documentales</div>
+
+    <!-- Header -->
+    <div class="hidden sm:grid grid-cols-[1fr_auto_160px] gap-3 mb-1 px-0">
+      <div class="text-xs font-bold text-gray-400 uppercase tracking-wide">Documento</div>
+      <div class="text-xs font-bold text-gray-400 uppercase tracking-wide text-center">Estado</div>
+      <div class="text-xs font-bold text-gray-400 uppercase tracking-wide">Vencimiento</div>
+    </div>
+
+    <!-- Rows -->
+    <div id="docs-list">
+      <!-- JS renders rows -->
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- SECCIÓN 3: COMPONENTES ELÉCTRICOS           -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div class="section-card">
+    <div class="section-title"><i class="fa-solid fa-bolt"></i> Componentes Eléctricos</div>
+    <div id="electricos-list"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- SECCIÓN 4: COMPONENTES MECÁNICOS Y OTROS    -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div class="section-card">
+    <div class="section-title"><i class="fa-solid fa-wrench"></i> Componentes Mecánicos y Otros</div>
+    <div id="mecanicos-list"></div>
+
+    <!-- Extra fields -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
+      <div>
+        <label class="form-label">Fecha Vencimiento Extintor</label>
+        <input id="f-extintor" type="date" class="form-input" />
+      </div>
+      <div>
+        <label class="form-label">Próximo Cambio de Aceite (km)</label>
+        <input id="f-aceite" type="number" min="0" placeholder="Ej: 45000" class="form-input" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- SECCIÓN 5: NOVEDADES Y FIRMA               -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div class="section-card">
+    <div class="section-title"><i class="fa-solid fa-pen-to-square"></i> Novedades y Firma</div>
+
+    <div class="mb-5">
+      <label class="form-label">Observaciones y Novedades</label>
+      <textarea id="f-observaciones" rows="4" placeholder="Describa cualquier novedad, daño o situación relevante encontrada durante la revisión..."
+        class="form-input resize-none" style="font-size:0.875rem"></textarea>
+    </div>
+
+    <div class="mb-5 no-print">
+      <label class="form-label mb-2 block">Evidencia de Novedades</label>
+      <label class="flex items-center gap-3 border-2 border-dashed border-gray-200 rounded-xl p-4 cursor-pointer hover:border-brand transition">
+        <i class="fa-solid fa-camera text-gray-400 text-2xl"></i>
+        <div>
+          <p class="text-gray-600 text-sm font-medium">Adjuntar fotografías del vehículo</p>
+          <p class="text-gray-400 text-xs mt-0.5">JPG, PNG · Máx 10MB por archivo</p>
+        </div>
+        <input id="f-fotos" type="file" accept="image/*" multiple class="hidden" onchange="handleFotos(event)" />
+      </label>
+      <div id="fotos-preview" class="flex flex-wrap gap-2 mt-2"></div>
+    </div>
+
+    <!-- Firma -->
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <label class="form-label mb-0">Firma del Conductor</label>
+        <button onclick="limpiarFirma()" class="no-print text-xs text-gray-400 hover:text-red-500 transition flex items-center gap-1">
+          <i class="fa-solid fa-eraser"></i> Limpiar
+        </button>
+      </div>
+      <canvas id="firma-canvas" width="600" height="140" class="w-full max-w-lg"></canvas>
+      <p class="text-gray-400 text-xs mt-1 no-print">Firme con el dedo o el mouse en el área de arriba</p>
+    </div>
+  </div>
+
+  <!-- BOTTOM ACTIONS -->
+  <div class="flex gap-3 justify-end pb-8 no-print flex-wrap">
+    <button onclick="limpiarTodo()"
+      class="border-2 border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-500 px-5 py-2.5 rounded-xl text-sm font-semibold transition">
+      <i class="fa-solid fa-trash mr-1"></i> Limpiar todo
+    </button>
+    <button onclick="guardarBorrador()"
+      class="border-2 border-gray-200 hover:border-brand text-gray-600 hover:text-brand px-5 py-2.5 rounded-xl text-sm font-semibold transition">
+      <i class="fa-solid fa-floppy-disk mr-1"></i> Guardar borrador
+    </button>
+    <button onclick="window.print()"
+      class="bg-gray-700 hover:bg-gray-800 text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition">
+      <i class="fa-solid fa-print mr-1"></i> Imprimir
+    </button>
+    <button onclick="generarPDF()"
+      class="bg-brand hover:bg-brand-light text-white px-5 py-2.5 rounded-xl text-sm font-semibold transition">
+      <i class="fa-solid fa-file-pdf mr-1"></i> Descargar PDF
+    </button>
+  </div>
+
+</main>
+
+<script>
+// ============================================================
+// FORM DATA
+// ============================================================
+const DOCS = [
+  { id: 'doc_licencia', label: 'Licencia de Conducción',                       opts: ['Sí','No'] },
+  { id: 'doc_top',      label: 'Tarjeta de Operación',                          opts: ['Sí','No','N/A'] },
+  { id: 'doc_soat',     label: 'Tarjeta de SOAT',                               opts: ['Sí','No','N/A'] },
+  { id: 'doc_rtm',      label: 'Revisión Técnico Mecánica y Emisiones',          opts: ['Sí','No','N/A'] },
+  { id: 'doc_rcc',      label: 'Póliza RCC (Resp. Civil Contractual)',           opts: ['Sí','No','N/A'] },
+  { id: 'doc_rce',      label: 'Póliza RCE (Resp. Civil Extracontractual)',      opts: ['Sí','No','N/A'] },
+];
+
+const ELECTRICOS = [
+  'Alarma de Retroceso',
+  'Luces frontales',
+  'Luces traseras',
+  'Luces de la cabina',
+  'Luces de stop y señal trasera',
+  'Pito de servicio y timbre de pasajeros',
+  'Luces direccionales y de parqueo (Giros)',
+  'Luces de interior: cabina, aviso, mandos y testigos',
+];
+
+const MECANICOS = [
+  'Freno de servicio y de estacionamiento',
+  'Dirección / Suspensión',
+  'Cinturón de seguridad del conductor',
+  'Cinturones de seguridad de los pasajeros',
+  'Espejos Laterales',
+  'Limpiaparabrisas',
+  'Rutograma o encuesta de puntos críticos',
+  'Indicadores de velocidad, RPM, temperatura',
+  'Indicadores de combustible',
+  'Nivel de aceite del motor',
+  'Nivel hidráulico',
+  'Nivel de refrigerante',
+  'El vehículo presenta fugas en algún elemento',
+  'Nivel de líquido de frenos',
+  'Estado de Llantas',
+  'Batería y cables en buen estado',
+  'Equipo de carretera completo (botiquín, extintor, conos, herramientas, chaleco, llanta de repuesto, cruceta)',
+];
+
+// ============================================================
+// RENDER FORM SECTIONS
+// ============================================================
+function renderDocs() {
+  const el = document.getElementById('docs-list');
+  el.innerHTML = DOCS.map(doc => {
+    const radios = doc.opts.map((opt, i) => {
+      const cls = opt === 'Sí' ? 'si' : (opt === 'No' ? 'no' : 'noaplica');
+      return `<div class="radio-opt ${cls}">
+        <input type="radio" name="${doc.id}" id="${doc.id}_${i}" value="${opt}" />
+        <label for="${doc.id}_${i}">${opt}</label>
+      </div>`;
+    }).join('');
+
+    return `<div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_160px] gap-3 items-center py-2.5 border-b border-gray-100 last:border-0">
+      <div class="text-sm font-medium text-gray-700">${doc.label}</div>
+      <div class="radio-group">${radios}</div>
+      <div>
+        <input type="date" id="${doc.id}_vence"
+          class="border-2 border-gray-200 rounded-lg px-2 py-1 text-xs w-full focus:border-brand focus:outline-none transition" />
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderChecklist(containerId, items, prefix) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = items.map((item, i) => {
+    const id = `${prefix}_${i}`;
+    return `<div class="check-row">
+      <div class="item-label">${item}</div>
+      <div class="radio-group">
+        <div class="radio-opt cumple">
+          <input type="radio" name="${id}" id="${id}_c" value="Cumple" />
+          <label for="${id}_c">Cumple</label>
+        </div>
+        <div class="radio-opt nocumple">
+          <input type="radio" name="${id}" id="${id}_n" value="No Cumple" />
+          <label for="${id}_n">No Cumple</label>
+        </div>
+        <div class="radio-opt noaplica">
+          <input type="radio" name="${id}" id="${id}_na" value="N/A" />
+          <label for="${id}_na">N/A</label>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ============================================================
+// SIGNATURE CANVAS
+// ============================================================
+const canvas = document.getElementById('firma-canvas');
+const ctx = canvas.getContext('2d');
+let drawing = false;
+let lastX = 0, lastY = 0;
+
+function getPos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  if (e.touches) {
+    return {
+      x: (e.touches[0].clientX - rect.left) * scaleX,
+      y: (e.touches[0].clientY - rect.top)  * scaleY
+    };
+  }
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top)  * scaleY
+  };
+}
+
+canvas.addEventListener('mousedown',  e => { drawing = true; const p = getPos(e); lastX = p.x; lastY = p.y; });
+canvas.addEventListener('mousemove',  e => {
+  if (!drawing) return;
+  const p = getPos(e);
+  ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p.x, p.y);
+  ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+  lastX = p.x; lastY = p.y;
+});
+canvas.addEventListener('mouseup',   () => drawing = false);
+canvas.addEventListener('mouseleave',() => drawing = false);
+canvas.addEventListener('touchstart', e => { e.preventDefault(); drawing = true; const p = getPos(e); lastX = p.x; lastY = p.y; }, { passive: false });
+canvas.addEventListener('touchmove',  e => {
+  e.preventDefault();
+  if (!drawing) return;
+  const p = getPos(e);
+  ctx.beginPath(); ctx.moveTo(lastX, lastY); ctx.lineTo(p.x, p.y);
+  ctx.strokeStyle = '#1e293b'; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+  lastX = p.x; lastY = p.y;
+}, { passive: false });
+canvas.addEventListener('touchend', () => drawing = false);
+
+function limpiarFirma() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+}
+
+// ============================================================
+// PHOTO PREVIEW
+// ============================================================
+function handleFotos(e) {
+  const preview = document.getElementById('fotos-preview');
+  Array.from(e.target.files).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = document.createElement('img');
+      img.src = ev.target.result;
+      img.className = 'w-20 h-20 object-cover rounded-lg border-2 border-gray-200';
+      preview.appendChild(img);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function getRadioVal(name) {
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? el.value : '—';
+}
+
+function fmtFecha(str) {
+  if (!str) return '—';
+  const p = str.split('-');
+  if (p.length !== 3) return str;
+  return `${p[2]}/${p[1]}/${p[0]}`;
+}
+
+function fmtHora(str) {
+  if (!str) return '—';
+  return str;
+}
+
+function getVal(id) {
+  const el = document.getElementById(id);
+  return el ? (el.value || '').trim() : '';
+}
+
+// ============================================================
+// BORRADOR (localStorage)
+// ============================================================
+const DRAFT_KEY = 'speedy_preop_draft';
+
+function guardarBorrador() {
+  const data = {
+    fecha: getVal('f-fecha'), hora: getVal('f-hora'), placa: getVal('f-placa'),
+    km: getVal('f-km'), conductor: getVal('f-conductor'), cedula: getVal('f-cedula'),
+    correo: getVal('f-correo'), extintor: getVal('f-extintor'), aceite: getVal('f-aceite'),
+    observaciones: getVal('f-observaciones'),
+    docs: DOCS.reduce((acc, d) => {
+      acc[d.id] = getRadioVal(d.id);
+      acc[d.id + '_vence'] = getVal(d.id + '_vence');
+      return acc;
+    }, {}),
+    electricos: ELECTRICOS.map((_, i) => getRadioVal(`elec_${i}`)),
+    mecanicos:  MECANICOS.map((_,  i) => getRadioVal(`mec_${i}`)),
+    firma: canvas.toDataURL(),
+  };
+  localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+  const notice = document.getElementById('borrador-notice');
+  notice.classList.remove('hidden');
+  notice.querySelector('p').textContent = 'Borrador guardado correctamente.';
+  setTimeout(() => notice.classList.add('hidden'), 3000);
+}
+
+function cargarBorrador() {
+  const raw = localStorage.getItem(DRAFT_KEY);
+  if (!raw) return;
+  try {
+    const data = JSON.parse(raw);
+    ['fecha','hora','placa','km','conductor','cedula','correo','extintor','aceite','observaciones']
+      .forEach(k => { const el = document.getElementById('f-' + k); if (el) el.value = data[k] || ''; });
+    DOCS.forEach(d => {
+      const val = data.docs?.[d.id];
+      if (val && val !== '—') {
+        const r = document.querySelector(`input[name="${d.id}"][value="${val}"]`);
+        if (r) r.checked = true;
+      }
+      const vEl = document.getElementById(d.id + '_vence');
+      if (vEl && data.docs?.[d.id + '_vence']) vEl.value = data.docs[d.id + '_vence'];
+    });
+    (data.electricos || []).forEach((val, i) => {
+      if (val && val !== '—') { const r = document.querySelector(`input[name="elec_${i}"][value="${val}"]`); if (r) r.checked = true; }
+    });
+    (data.mecanicos || []).forEach((val, i) => {
+      if (val && val !== '—') { const r = document.querySelector(`input[name="mec_${i}"][value="${val}"]`); if (r) r.checked = true; }
+    });
+    if (data.firma && data.firma !== 'data:,') {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0);
+      img.src = data.firma;
+    }
+    document.getElementById('borrador-notice').classList.remove('hidden');
+  } catch (e) { /* ignore corrupt draft */ }
+}
+
+function limpiarBorrador() {
+  localStorage.removeItem(DRAFT_KEY);
+  document.getElementById('borrador-notice').classList.add('hidden');
+}
+
+function limpiarTodo() {
+  if (!confirm('¿Limpiar todos los campos del formulario?')) return;
+  document.querySelectorAll('input[type="text"], input[type="number"], input[type="email"], input[type="date"], input[type="time"], textarea')
+    .forEach(el => el.value = '');
+  document.querySelectorAll('input[type="radio"]').forEach(r => r.checked = false);
+  limpiarFirma();
+  document.getElementById('fotos-preview').innerHTML = '';
+}
+
+// ============================================================
+// PDF GENERATION
+// ============================================================
+function generarPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+
+  const placa = getVal('f-placa') || 'SIN PLACA';
+  const fecha = fmtFecha(getVal('f-fecha'));
+  const hora  = fmtHora(getVal('f-hora'));
+  const now   = new Date().toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'numeric' });
+
+  // Header
+  doc.setFillColor(30, 58, 138);
+  doc.rect(0, 0, pageW, 22, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+  doc.text('Speedy', 12, 14);
+  doc.setFontSize(11); doc.setFont('helvetica', 'normal');
+  doc.text('REVISIÓN PREOPERACIONAL VEHICULAR', pageW / 2, 14, { align: 'center' });
+
+  doc.setFillColor(241, 245, 249);
+  doc.rect(0, 22, pageW, 9, 'F');
+  doc.setTextColor(100, 116, 139); doc.setFontSize(8);
+  doc.text(`Transporte Especial · Generado: ${now}`, pageW / 2, 27.5, { align: 'center' });
+
+  let y = 36;
+  doc.setTextColor(0, 0, 0);
+
+  function sTitle(title) {
+    if (y > pageH - 40) { doc.addPage(); y = 15; }
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 58, 138);
+    doc.text(title.toUpperCase(), 12, y);
+    doc.setDrawColor(30, 58, 138); doc.setLineWidth(0.4);
+    doc.line(12, y + 1.5, pageW - 12, y + 1.5);
+    doc.setTextColor(0, 0, 0); y += 6;
+  }
+
+  // 1. Información General
+  sTitle('Información General');
+  doc.autoTable({
+    startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    head: [['Campo', 'Valor', 'Campo', 'Valor']],
+    body: [
+      ['Fecha',          fecha,                   'Hora',         hora],
+      ['Placa',          placa,                   'Kilometraje',  getVal('f-km') || '—'],
+      ['Conductor',      getVal('f-conductor') || '—', 'Cédula', getVal('f-cedula') || '—'],
+      ['Correo',         getVal('f-correo') || '—', '', ''],
+    ],
+    columnStyles: { 0: { fontStyle: 'bold', cellWidth: 35 }, 2: { fontStyle: 'bold', cellWidth: 35 } },
+  });
+  y = doc.lastAutoTable.finalY + 5;
+
+  // 2. Requisitos Documentales
+  sTitle('Requisitos Documentales');
+  const docRows = DOCS.map(d => [
+    d.label,
+    getRadioVal(d.id),
+    fmtFecha(getVal(d.id + '_vence'))
+  ]);
+  doc.autoTable({
+    startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    head: [['Documento', 'Estado', 'Vencimiento']],
+    body: docRows,
+    columnStyles: { 1: { fontStyle: 'bold', cellWidth: 25 }, 2: { cellWidth: 30 } },
+    didDrawCell: hd => {
+      if (hd.section === 'body' && hd.column.index === 1) {
+        const v = (hd.cell.raw || '').toString();
+        if (v === 'Sí')     hd.cell.styles.textColor = [21, 128, 61];
+        else if (v === 'No') hd.cell.styles.textColor = [220, 38, 38];
+      }
+    }
+  });
+  y = doc.lastAutoTable.finalY + 5;
+
+  // 3. Componentes Eléctricos
+  sTitle('Componentes Eléctricos');
+  const elecRows = ELECTRICOS.map((item, i) => [item, getRadioVal(`elec_${i}`)]);
+  doc.autoTable({
+    startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    head: [['Componente', 'Resultado']],
+    body: elecRows,
+    columnStyles: { 1: { fontStyle: 'bold', cellWidth: 35 } },
+    didDrawCell: hd => colorResult(hd),
+  });
+  y = doc.lastAutoTable.finalY + 5;
+
+  // 4. Componentes Mecánicos
+  sTitle('Componentes Mecánicos y Otros');
+  const mecRows = MECANICOS.map((item, i) => [item, getRadioVal(`mec_${i}`)]);
+  mecRows.push(['Fecha Vencimiento Extintor', fmtFecha(getVal('f-extintor'))]);
+  mecRows.push(['Próximo Cambio de Aceite (km)', getVal('f-aceite') || '—']);
+  doc.autoTable({
+    startY: y, margin: { left: 12, right: 12 }, theme: 'striped',
+    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontSize: 8, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    head: [['Componente', 'Resultado']],
+    body: mecRows,
+    columnStyles: { 1: { fontStyle: 'bold', cellWidth: 35 } },
+    didDrawCell: hd => colorResult(hd),
+  });
+  y = doc.lastAutoTable.finalY + 5;
+
+  // 5. Observaciones
+  const obs = getVal('f-observaciones');
+  if (obs) {
+    sTitle('Observaciones y Novedades');
+    const lines = doc.splitTextToSize(obs, pageW - 24);
+    if (y + lines.length * 5 > pageH - 20) { doc.addPage(); y = 15; }
+    doc.setFontSize(8.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 41, 59);
+    doc.text(lines, 12, y);
+    y += lines.length * 5 + 4;
+  }
+
+  // 6. Firma
+  if (y > pageH - 50) { doc.addPage(); y = 15; }
+  sTitle('Firma del Conductor');
+  const firmaData = canvas.toDataURL('image/png');
+  const firmaEmpty = !firmaData || firmaData === 'data:,' ||
+    !ctx.getImageData(0, 0, canvas.width, canvas.height).data.some(d => d !== 0);
+  if (!firmaEmpty) {
+    doc.addImage(firmaData, 'PNG', 12, y, 80, 22);
+    y += 26;
+  } else {
+    doc.setFontSize(8); doc.setTextColor(150);
+    doc.text('(Sin firma)', 12, y + 10);
+    y += 16;
+  }
+  doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(30, 41, 59);
+  doc.text(getVal('f-conductor') || '___________________________', 12, y);
+  doc.text('Nombre del conductor', 12, y + 4);
+  doc.setTextColor(150); doc.setFontSize(7);
+  doc.text(`C.C. ${getVal('f-cedula') || '___________________'}`, 12, y + 8);
+
+  // Footer en cada página
+  const pages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= pages; i++) {
+    doc.setPage(i);
+    const fy = pageH - 8;
+    doc.setFillColor(241, 245, 249); doc.rect(0, fy - 4, pageW, 12, 'F');
+    doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(100, 116, 139);
+    doc.text('Speedy · Sistema de Gestión Vehicular · Transporte Especial', pageW / 2, fy + 1, { align: 'center' });
+    doc.text(`Pág. ${i} de ${pages}`, pageW - 12, fy + 1, { align: 'right' });
+  }
+
+  const dateTag = new Date().toISOString().substring(0, 10);
+  doc.save(`Speedy_Preoperacional_${placa}_${dateTag}.pdf`);
+}
+
+function colorResult(hd) {
+  if (hd.section === 'body' && hd.column.index === 1) {
+    const v = (hd.cell.raw || '').toString();
+    if (v === 'Cumple' || v === 'Sí')           hd.cell.styles.textColor = [21, 128, 61];
+    else if (v === 'No Cumple' || v === 'No')    hd.cell.styles.textColor = [220, 38, 38];
+    else if (v === 'N/A')                        hd.cell.styles.textColor = [100, 116, 139];
+  }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  renderDocs();
+  renderChecklist('electricos-list', ELECTRICOS, 'elec');
+  renderChecklist('mecanicos-list',  MECANICOS,  'mec');
+
+  // Auto-fill date and time
+  const now = new Date();
+  document.getElementById('f-fecha').value = now.toISOString().substring(0, 10);
+  document.getElementById('f-hora').value  =
+    now.toTimeString().substring(0, 5);
+
+  // Load draft if exists
+  if (localStorage.getItem(DRAFT_KEY)) cargarBorrador();
+});
+</script>
+</body>
+</html>
